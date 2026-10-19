@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.cache/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+*.log
+.env*
+!.env.example
+agent/
+AGENTS.md
+.DS_Store
+.idea/

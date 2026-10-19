@@ -1,0 +1,12 @@
+node_modules
+dist
+.cache
+coverage
+playwright-report
+test-results
+.git
+.env*
+agent
+**/AGENTS.md
+*.log
+.DS_Store

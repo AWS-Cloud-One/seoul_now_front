@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.cache/
+coverage/
+package-lock.json
+agent/
+AGENTS.md
