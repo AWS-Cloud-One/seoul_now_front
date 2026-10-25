@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "5.104.4",
+    "hls.js": "1.7.3",
     "react": "19.2.9",
     "react-dom": "19.2.9"
   },
