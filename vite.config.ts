@@ -15,7 +15,13 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
-    server: { host: '127.0.0.1', port: 5173, strictPort: true, proxy },
+    server: {
+      host: '127.0.0.1',
+      port: 5173,
+      strictPort: true,
+      proxy,
+      watch: { usePolling: process.env.DOCKER_WATCH_POLLING === 'true', interval: 500 },
+    },
     preview: { host: '127.0.0.1', port: 4173, strictPort: true, proxy },
   }
 })
