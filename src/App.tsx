@@ -138,7 +138,7 @@ export default function App() {
   }, [])
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${base}/map/population`, { signal: controller.signal })
+    const refreshPopulation = () => fetch(`${base}/map/population`, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error('혼잡도 데이터를 불러오지 못했습니다.')
         return r.json()
@@ -147,7 +147,12 @@ export default function App() {
       .catch((error) => {
         if (!controller.signal.aborted) setNotice(error.message)
       })
-    return () => controller.abort()
+    void refreshPopulation()
+    const refreshTimer = window.setInterval(() => void refreshPopulation(), 60000)
+    return () => {
+      window.clearInterval(refreshTimer)
+      controller.abort()
+    }
   }, [])
   async function search() {
     await action(async () => {
