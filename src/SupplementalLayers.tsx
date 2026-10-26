@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 const CctvPlayer = lazy(() => import('./CctvPlayer'))
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 
 type Item = {
   id: string
@@ -52,7 +52,7 @@ export default function SupplementalLayers({ map }: { map: kakao.maps.Map | null
     },
     [],
   )
-  async function load(layer: string) {
+  async function load(layer: string, reposition = true) {
     if (!map) return
     setBusy(true)
     setMessage('조회 중…')
@@ -61,10 +61,16 @@ export default function SupplementalLayers({ map }: { map: kakao.maps.Map | null
       const result = await response.json()
       if (!response.ok) throw new Error(result.detail || '자료를 불러오지 못했습니다.')
       clear()
-      setData(result)
+      const availableItems =
+        layer === 'pedestrians'
+          ? ((result.items || []) as Item[]).filter(
+              (item) => item.observation_status === 'recent' && item.count_10min != null,
+            )
+          : ((result.items || []) as Item[])
+      setData({ ...result, items: availableItems })
       setKind(layer)
       const bounds = new kakao.maps.LatLngBounds()
-      for (const item of (result.items || []) as Item[]) {
+      for (const item of availableItems) {
         const position = new kakao.maps.LatLng(item.lat, item.lng)
         const marker = new kakao.maps.Marker({
           map,
@@ -106,9 +112,9 @@ export default function SupplementalLayers({ map }: { map: kakao.maps.Map | null
           )
         }
       }
-      if (result.items?.length) map.setBounds(bounds)
+      if (reposition && availableItems.length) map.setBounds(bounds)
       setMessage(
-        `${result.features ? `영역 ${result.features.length}개` : `${result.items.length}지점`} · 수집 ${new Date(result.collected_at).toLocaleString('ko-KR')} · ${result.notice || ''}`,
+        `${layer === 'pedestrians' ? `최근 관측 ${availableItems.length}곳 / 설치 ${result.items.length}곳 · 미확인 ${result.items.length - availableItems.length}곳은 지도에서 제외` : result.features ? `영역 ${result.features.length}개` : `${result.items.length}지점`} · 수집 ${new Date(result.collected_at).toLocaleString('ko-KR')} · ${result.notice || ''}`,
       )
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '조회 실패')
@@ -116,6 +122,14 @@ export default function SupplementalLayers({ map }: { map: kakao.maps.Map | null
       setBusy(false)
     }
   }
+  const refreshSensors = useEffectEvent(() => {
+    void load('pedestrians', false)
+  })
+  useEffect(() => {
+    if (kind !== 'pedestrians' || !map) return
+    const timer = window.setInterval(() => refreshSensors(), 60000)
+    return () => window.clearInterval(timer)
+  }, [kind, map])
   return (
     <section className="supplemental">
       <h2>추가 서울 데이터</h2>
