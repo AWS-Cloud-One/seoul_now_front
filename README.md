@@ -2,7 +2,20 @@
 
 서울 여행 중 다음 방문 장소를 비교하고 선택하는 웹 화면을 개발하는 저장소입니다.
 
-현재는 **프레임워크 설치와 디렉터리 구조를 준비한 단계**입니다. `App.tsx`에는 실행 확인용 제목과 안내 문구만 있습니다. 실제 서비스 화면·API 호출·지도·상태 처리 기능은 앞으로 작성합니다.
+기본 화면(`/`)은 전달받은 **서울_지금_어디_데모.html**을 **React 컴포넌트로 변환**한 화면입니다. 시작 화면, 지도 미리보기, 조건 입력, 대화, 추천 카드, 장소 상세, 여행별 이름·삭제·기록을 React 상태로 관리합니다. **AI 응답과 실시간 정보는 원본의 모의 데이터이며 백엔드 API에 연결되지 않습니다.** 지도 배경 타일은 인터넷 연결이 필요합니다.
+
+- 실행: 프로젝트 루트에서 `npm ci` 후 `npm run dev` → http://127.0.0.1:5173/
+- 진입점: `index.html` → `src/main.tsx` → `src/App.tsx`
+- 화면 컴포넌트: `src/demo/components/` (시작·미리보기·대화·조건 폼·지도·장소 상세·여행 메뉴·대화상자)
+- 여행·요청 상태: `src/demo/state.ts`, `DemoProvider.tsx`, `useDemo.ts`. 원본과 같은 세션 저장 키를 사용해 기존 여행도 복원합니다.
+- 원본 추천·대화 해석 로직: `src/demo/domain.js` (형식 선언은 `domain.d.ts`)
+- 도로·주차·인구 지도 자료: `public/data/seoul-map.json`. 지도가 필요할 때만 로드합니다. 지도 SDK와 캔버스 레이어의 생성·해제는 `GeoMap.tsx`, `mapLayers.js`에서 관리하며 정보 팝업은 React portal로 렌더링합니다.
+- 스타일: `src/demo/styles/` (원본 순서 유지), 이미지: `public/images/`
+- 기존 React/API 지도 화면: http://127.0.0.1:5173/developer.html (`src/LegacyApp.tsx`, 기존 환경변수와 백엔드 사용)
+- 저장한 여행: 추천 결과의 **여행 저장** 또는 챗봇 아래 **북마크 메뉴 → 현재 추천 저장**으로 보관합니다. 저장 목록은 `localStorage`의 `seoul-saved-trips-v1`에 유지되며, 목록을 누르면 새 요청 없이 저장 당시 추천·조건·선택 장소를 복원합니다. 최근 5개 추천 기록이나 세션 여행이 삭제돼도 저장본은 유지됩니다.
+- 보관용 원본: `public/demo/original.html`. 화면 하단 **HTML 파일 저장**에서 내려받으며, 앱 실행에는 사용하지 않습니다.
+- 검증: `npm run typecheck`, `npm run lint`, `npm run test -- --maxWorkers=1`, `npm run build`
+- `npm run build` 시 두 진입점이 모두 `dist/`에 생성됩니다.
 
 > 처음 참여했다면 **작업 위치 알아보기 → 처음 실행하기 → 다음 날 다시 개발할 때** 순서로 읽어 주세요. 기본 실행에는 백엔드 서버나 지도 키가 필요하지 않습니다.
 
@@ -44,7 +57,7 @@ seoul_now_front/
 │   ├── types/
 │   ├── styles/
 │   │   └── global.css      # Tailwind를 불러오는 공통 CSS
-│   ├── App.tsx             # 화면을 연결할 최상위 컴포넌트. 현재는 기본 문구만 표시
+│   ├── App.tsx             # React로 변환한 서울 나들이 화면의 최상위 컴포넌트
 │   ├── main.tsx            # React 앱의 시작점
 │   ├── test-setup.ts       # 테스트 공통 설정
 │   └── vite-env.d.ts       # 환경변수 타입 선언
@@ -316,3 +329,5 @@ docker build --target export --output type=local,dest=dist .
 Docker 빌드는 `.env`를 읽지 않습니다. 향후 지도용 JavaScript 키 등 공개 빌드 설정이 필요하면 `--build-arg VITE_KAKAO_MAP_APP_KEY=값`을 추가합니다. 서버 비밀키를 전달하는 용도로 사용하지 않습니다.
 
 </details>
+
+주차장 API 교체 방법과 응답 계약: [docs/parking-api.md](docs/parking-api.md).

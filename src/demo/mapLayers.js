@@ -1,0 +1,452 @@
+import L from './vendor/leaflet.js'
+import { placeById } from './domain.js'
+import { normalizeParkingResponse } from './parking/normalize'
+import { parkingAvailability, parkingBadge } from './parking/display'
+const esc = (v) =>
+  String(v ?? '').replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+  )
+export function createMapLayers(
+  map,
+  {
+    data: SEOUL_MAP_DATA,
+    overview = false,
+    parkingRecords,
+    layers,
+    result,
+    selected,
+    onRecord,
+    onParkingHint,
+  },
+) {
+  const NEARBY_RADIUS_METERS = 800
+  const POPULATION_COLORS = {
+    여유: '#679dd5',
+    보통: '#dfbb58',
+    '약간 붐빔': '#e58b44',
+    붐빔: '#cf5c70',
+  }
+  const roadColor = (road) =>
+    road.speed == null
+      ? '#8999aa'
+      : road.speed < 20
+        ? '#d9544e'
+        : road.speed < 40
+          ? '#c58e24'
+          : '#208973'
+  function groupParking(records) {
+    const positions = new Map()
+    for (const p of records) {
+      if (p.lat === null || p.lng === null) continue
+      const key = `${p.lat},${p.lng}`
+      if (!positions.has(key)) positions.set(key, { lat: p.lat, lng: p.lng, records: [] })
+      positions.get(key).records.push(p)
+    }
+    return [...positions.values()]
+  }
+  let PARKING_LOCATIONS = groupParking(
+    parkingRecords ?? normalizeParkingResponse(SEOUL_MAP_DATA.parking),
+  )
+  const POPULATION_AREAS = SEOUL_MAP_DATA.population.features
+    .map((feature) => {
+      const polygons =
+        feature.geometry.type === 'MultiPolygon'
+          ? feature.geometry.coordinates
+          : [feature.geometry.coordinates]
+      const points = polygons.flat(2)
+      const bbox = [
+        Math.min(...points.map((p) => p[0])),
+        Math.min(...points.map((p) => p[1])),
+        Math.max(...points.map((p) => p[0])),
+        Math.max(...points.map((p) => p[1])),
+      ]
+      return {
+        feature,
+        polygons,
+        bbox,
+        level: Object.keys(POPULATION_COLORS).indexOf(feature.properties.congestion),
+      }
+    })
+    .sort((a, b) => a.level - b.level)
+  function pointInRing(lng, lat, ring) {
+    let inside = false
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i],
+        [xj, yj] = ring[j]
+      if (yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside
+    }
+    return inside
+  }
+  function areaContains(area, latlng) {
+    return area.polygons.some(
+      (rings) =>
+        pointInRing(latlng.lng, latlng.lat, rings[0]) &&
+        !rings.slice(1).some((ring) => pointInRing(latlng.lng, latlng.lat, ring)),
+    )
+  }
+  function intersectsMapBox(bbox, bounds) {
+    const [w, s, e, n] = bbox
+    return (
+      e >= bounds.getWest() &&
+      w <= bounds.getEast() &&
+      n >= bounds.getSouth() &&
+      s <= bounds.getNorth()
+    )
+  }
+  function distanceToPlace(lat, lng, place) {
+    const radians = Math.PI / 180,
+      dLat = (lat - place.lat) * radians,
+      dLng = (lng - place.lon) * radians
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat * radians) * Math.cos(place.lat * radians) * Math.sin(dLng / 2) ** 2
+    return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)))
+  }
+  function isNearPlaces(lat, lng, places) {
+    return places.some((place) => distanceToPlace(lat, lng, place) <= NEARBY_RADIUS_METERS)
+  }
+  function areaNearPlace(area, place) {
+    if (areaContains(area, { lat: place.lat, lng: place.lon })) return true
+    // Project just this local neighborhood into meters to test polygon edges.
+    const sy = (Math.PI * 6371000) / 180,
+      sx = sy * Math.cos((place.lat * Math.PI) / 180),
+      r2 = NEARBY_RADIUS_METERS ** 2
+    const [w, s, e, n] = area.bbox
+    if (
+      w > place.lon + NEARBY_RADIUS_METERS / sx ||
+      e < place.lon - NEARBY_RADIUS_METERS / sx ||
+      s > place.lat + NEARBY_RADIUS_METERS / sy ||
+      n < place.lat - NEARBY_RADIUS_METERS / sy
+    )
+      return false
+    for (const polygon of area.polygons)
+      for (const ring of polygon)
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const ax = (ring[j][0] - place.lon) * sx,
+            ay = (ring[j][1] - place.lat) * sy,
+            bx = (ring[i][0] - place.lon) * sx,
+            by = (ring[i][1] - place.lat) * sy
+          const dx = bx - ax,
+            dy = by - ay,
+            length = dx * dx + dy * dy
+          const t = length ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / length)) : 0
+          if ((ax + t * dx) ** 2 + (ay + t * dy) ** 2 <= r2) return true
+        }
+    return false
+  }
+  function mapNeighborhood(result) {
+    // Match the displayed results, including a retained result during a new search.
+    const places = (result?.entries || []).map((entry) => placeById(entry.id)).filter(Boolean)
+    return {
+      places,
+      parking: places.length
+        ? PARKING_LOCATIONS.filter((p) => isNearPlaces(p.lat, p.lng, places))
+        : overview
+          ? PARKING_LOCATIONS
+          : [],
+      population: places.length
+        ? POPULATION_AREAS.filter((area) => places.some((place) => areaNearPlace(area, place)))
+        : overview
+          ? POPULATION_AREAS
+          : [],
+    }
+  }
+  function parkingGrid(map, zoom, locations, cache) {
+    if (cache.has(zoom)) return cache.get(zoom)
+    const cell = zoom < 15 ? 108 : zoom < 17 ? 84 : 64,
+      groups = new Map()
+    for (const location of locations) {
+      const point = map.project([location.lat, location.lng], zoom),
+        key = `${zoom}:${Math.floor(point.x / cell)}:${Math.floor(point.y / cell)}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(location)
+    }
+    const grid = [...groups.entries()].map(([key, locations]) => ({
+      key,
+      locations,
+      lat: locations.reduce((n, p) => n + p.lat, 0) / locations.length,
+      lng: locations.reduce((n, p) => n + p.lng, 0) / locations.length,
+    }))
+    cache.set(zoom, grid)
+    if (cache.size > 4) cache.delete(cache.keys().next().value)
+    return grid
+  }
+
+  const neighborhood = mapNeighborhood(result),
+    parkingCache = new Map()
+  const panes = [
+    ['observed-population', 390],
+    ['observed-roads', 420],
+    ['registered-parking', 580],
+  ]
+  for (const [name, z] of panes) {
+    ;(map.getPane(name) || map.createPane(name)).style.zIndex = String(z)
+  }
+  const heatPane = map.getPane('observed-population')
+  heatPane.style.pointerEvents = 'none'
+  const heat = L.DomUtil.create('canvas', 'population-heat-canvas leaflet-zoom-hide', heatPane)
+  heat.setAttribute('aria-hidden', 'true')
+  const mask = document.createElement('canvas'),
+    scopeMask = document.createElement('canvas')
+  const roadRenderer = L.canvas({ pane: 'observed-roads', padding: 0.2, tolerance: 4 })
+  const roadLayer = L.layerGroup().addTo(map),
+    parkingLayer = L.layerGroup().addTo(map)
+  const roadItems = new Map(),
+    parkingItems = new Map()
+  const zoomToParking = () => {
+    const focus =
+      neighborhood.places.find((place) => place.id === selected) || neighborhood.places[0]
+    if (focus)
+      map.setView([focus.lat, focus.lon], 14, {
+        animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
+      })
+    else if (overview) map.setView(map.getCenter(), 14)
+  }
+
+  let frame = 0,
+    destroyed = false,
+    lastRoadStyle = '',
+    lastHeatView = '',
+    heatVisible = []
+  function drawHeat() {
+    heat.hidden = !layers.population || !neighborhood.population.length
+    if (heat.hidden) {
+      heatVisible = []
+      lastHeatView = ''
+      return
+    }
+    const size = map.getSize(),
+      origin = map.containerPointToLayerPoint([0, 0]),
+      zoom = map.getZoom(),
+      center = map.getCenter()
+    const view = [center.lat, center.lng, zoom, size.x, size.y].join(':')
+    if (view === lastHeatView) return
+    lastHeatView = view
+    // Low-resolution offscreen raster keeps blur inexpensive on high-DPI displays.
+    const pad = 90,
+      scale = 0.75,
+      width = Math.ceil((size.x + pad * 2) * scale),
+      height = Math.ceil((size.y + pad * 2) * scale)
+    scopeMask.width = mask.width = heat.width = width
+    scopeMask.height = mask.height = heat.height = height
+    heat.style.width = `${size.x + pad * 2}px`
+    heat.style.height = `${size.y + pad * 2}px`
+    L.DomUtil.setPosition(heat, origin.subtract([pad, pad]))
+    const ctx = mask.getContext('2d'),
+      output = heat.getContext('2d')
+    ctx.setTransform(scale, 0, 0, scale, 0, 0)
+    heatVisible = neighborhood.population.filter((area) =>
+      intersectsMapBox(area.bbox, map.getBounds().pad(0.25)),
+    )
+    for (const area of heatVisible) {
+      ctx.beginPath()
+      for (const polygon of area.polygons)
+        for (const ring of polygon) {
+          ring.forEach(([lng, lat], i) => {
+            const point = map.latLngToContainerPoint([lat, lng])
+            if (i === 0) ctx.moveTo(point.x + pad, point.y + pad)
+            else ctx.lineTo(point.x + pad, point.y + pad)
+          })
+          ctx.closePath()
+        }
+      ctx.fillStyle = POPULATION_COLORS[area.feature.properties.congestion] || '#a0abb9'
+      ctx.globalAlpha = [0.35, 0.47, 0.6, 0.7][area.level] || 0.3
+      ctx.fill('evenodd')
+    }
+    output.filter = `blur(${(zoom < 13 ? 14 : zoom < 15 ? 20 : 26) * scale}px)`
+    output.drawImage(mask, 0, 0)
+    output.filter = 'none'
+    if (overview) return
+    // Fade at the neighborhood edge after blurring, so heat cannot spread outside it.
+    const scope = scopeMask.getContext('2d')
+    scope.setTransform(scale, 0, 0, scale, 0, 0)
+    for (const place of neighborhood.places) {
+      const point = map.latLngToContainerPoint([place.lat, place.lon])
+      const north = map.latLngToContainerPoint([
+        place.lat + ((NEARBY_RADIUS_METERS / 6371000) * 180) / Math.PI,
+        place.lon,
+      ])
+      const radius = Math.abs(north.y - point.y),
+        x = point.x + pad,
+        y = point.y + pad
+      const gradient = scope.createRadialGradient(x, y, radius * 0.66, x, y, radius)
+      gradient.addColorStop(0, '#fff')
+      gradient.addColorStop(1, '#ffffff00')
+      scope.fillStyle = gradient
+      scope.beginPath()
+      scope.arc(x, y, radius, 0, Math.PI * 2)
+      scope.fill()
+    }
+    output.globalCompositeOperation = 'destination-in'
+    output.drawImage(scopeMask, 0, 0)
+    output.globalCompositeOperation = 'source-over'
+  }
+  function drawRoads(bounds, zoom) {
+    const present = new Set(),
+      weight = zoom < 12 ? 2.3 : zoom < 14 ? 2.7 : zoom < 16 ? 3.1 : 3.7,
+      opacity = 0.92
+    const styleKey = String(weight),
+      styleChanged = styleKey !== lastRoadStyle
+    lastRoadStyle = styleKey
+    if (layers.roads)
+      for (const road of SEOUL_MAP_DATA.roads) {
+        if (!intersectsMapBox(road.bbox, bounds)) continue
+        const classes =
+          zoom < 12
+            ? ['02']
+            : zoom < 14
+              ? ['02', '03']
+              : zoom < 16
+                ? ['02', '03', '04']
+                : ['02', '03', '04', '05']
+        if (!road.classes.some((c) => classes.includes(c))) continue
+        present.add(road.id)
+        if (roadItems.has(road.id)) {
+          if (styleChanged) roadItems.get(road.id).setStyle({ weight, opacity })
+          continue
+        }
+        const line = L.polyline(road.path, {
+          pane: 'observed-roads',
+          renderer: roadRenderer,
+          color: roadColor(road),
+          weight,
+          opacity,
+          lineCap: 'round',
+          lineJoin: 'round',
+          smoothFactor: 1.2,
+          bubblingMouseEvents: false,
+        })
+        line.bindTooltip(esc(road.name || '도로 정보'), {
+          sticky: true,
+          className: 'map-record-tooltip',
+          direction: 'top',
+        })
+        line.on('click', (e) => onRecord({ kind: 'road', data: road }, e.latlng))
+        line.addTo(roadLayer)
+        roadItems.set(road.id, line)
+      }
+    for (const [id, line] of roadItems)
+      if (!present.has(id)) {
+        roadLayer.removeLayer(line)
+        roadItems.delete(id)
+      }
+  }
+  function drawParking(bounds, zoom) {
+    const present = new Set()
+    onParkingHint(layers.parking && zoom < 14 && neighborhood.parking.length > 0, zoomToParking)
+    if (layers.parking && zoom >= 14)
+      for (const group of parkingGrid(map, zoom, neighborhood.parking, parkingCache)) {
+        const { key, locations, lat, lng } = group
+        if (!bounds.contains([lat, lng])) continue
+        present.add(key)
+        if (parkingItems.has(key)) continue
+        const count = locations.length,
+          cluster = count > 1
+        const label = cluster
+          ? `주차장 위치 ${count}곳 · 확대해서 보기`
+          : `${locations[0].records[0].name} 주차장 정보 · ${parkingAvailability(locations[0].records[0].available)}`
+        const available = locations[0].records[0].available
+        const badge = cluster ? count : available === null ? null : parkingBadge(available)
+        const marker = L.marker([lat, lng], {
+          pane: 'registered-parking',
+          icon: L.divIcon({
+            className: `registered-parking-marker ${cluster ? 'is-cluster' : ''}`,
+            html: `<span>P</span>${badge !== null ? `<b>${esc(badge)}</b>` : ''}`,
+            iconSize: badge !== null ? [44, 28] : [26, 26],
+            iconAnchor: badge !== null ? [22, 14] : [13, 13],
+          }),
+          title: label,
+          keyboard: true,
+          riseOnHover: true,
+        }).addTo(parkingLayer)
+        marker.getElement()?.setAttribute('aria-label', label)
+        marker.bindTooltip(esc(label), {
+          className: 'map-record-tooltip',
+          direction: 'top',
+          offset: [0, -15],
+        })
+        marker.on('click', () => {
+          if (cluster && zoom < 19) {
+            map.flyToBounds(
+              locations.map((p) => [p.lat, p.lng]),
+              {
+                paddingTopLeft: [60, 90],
+                paddingBottomRight: [60, 160],
+                maxZoom: Math.min(19, zoom + 3),
+                animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
+                duration: 0.55,
+              },
+            )
+          } else if (cluster) {
+            const items = locations.flatMap((p) =>
+              p.records.map((r) => ({ location: p, record: r })),
+            )
+            onRecord({ kind: 'parking-cluster', data: items }, [lat, lng])
+          } else onRecord({ kind: 'parking', data: locations[0] }, [lat, lng])
+        })
+        parkingItems.set(key, marker)
+      }
+    for (const [key, marker] of parkingItems)
+      if (!present.has(key)) {
+        parkingLayer.removeLayer(marker)
+        parkingItems.delete(key)
+      }
+  }
+  function draw() {
+    frame = 0
+    if (destroyed) return
+    const bounds = map.getBounds().pad(0.12),
+      zoom = map.getZoom()
+    drawHeat()
+    drawRoads(bounds, zoom)
+    drawParking(bounds, zoom)
+  }
+  const schedule = () => {
+    if (!frame && !destroyed) frame = requestAnimationFrame(draw)
+  }
+  const onAreaClick = (e) => {
+    if (
+      !layers.population ||
+      e.propagatedFrom ||
+      (!overview && !isNearPlaces(e.latlng.lat, e.latlng.lng, neighborhood.places))
+    )
+      return
+    const area = [...heatVisible].reverse().find((area) => areaContains(area, e.latlng))
+    if (area) onRecord({ kind: 'population', data: area.feature }, e.latlng)
+  }
+  map.on('moveend zoomend resize', schedule)
+  map.on('click', onAreaClick)
+  draw()
+  return {
+    updateParking(records) {
+      PARKING_LOCATIONS = groupParking(records)
+      neighborhood.parking = neighborhood.places.length
+        ? PARKING_LOCATIONS.filter((p) => isNearPlaces(p.lat, p.lng, neighborhood.places))
+        : overview
+          ? PARKING_LOCATIONS
+          : []
+      parkingCache.clear()
+      parkingLayer.clearLayers()
+      parkingItems.clear()
+      schedule()
+    },
+    update() {
+      map.closePopup()
+      schedule()
+    },
+    destroy() {
+      destroyed = true
+      if (frame) cancelAnimationFrame(frame)
+      map.off('moveend zoomend resize', schedule)
+      map.off('click', onAreaClick)
+      heat.remove()
+      map.removeLayer(roadLayer)
+      map.removeLayer(parkingLayer)
+      map.removeLayer(roadRenderer)
+      roadItems.clear()
+      parkingItems.clear()
+      parkingCache.clear()
+    },
+  }
+}

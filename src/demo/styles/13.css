@@ -1,0 +1,190 @@
+
+/* Small surface responses. Keep existing colors, typography and layout. */
+:root {
+  --surface-ease: cubic-bezier(.2, .65, .3, 1);
+  --surface-speed: 180ms;
+}
+
+/* The input keeps its existing border and background; depth changes on focus. */
+.chat-compose textarea {
+  box-shadow: 0 1px 2px #203b320a, 0 4px 12px #203b3206;
+  transition:
+    border-color var(--surface-speed) var(--surface-ease),
+    box-shadow 220ms var(--surface-ease),
+    background-color var(--surface-speed) var(--surface-ease);
+}
+
+.chat-compose form:focus-within textarea {
+  border-color: #77947c;
+  box-shadow: 0 0 0 3px #2854430d, 0 2px 4px #203b320a, 0 7px 18px #203b320a;
+}
+
+.chat-compose textarea:focus-visible {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px #28544314, 0 2px 4px #203b320a, 0 7px 18px #203b320a;
+}
+@media(forced-colors:active){.chat-compose textarea:focus-visible{outline:2px solid Highlight;outline-offset:2px}}
+
+/* Reserve a little vertical paint room without shifting the carousel's content
+   or its following controls. Keep the 2px horizontal inset: scroll JS uses it. */
+.chat-place-list {
+  padding-top: 7px;
+  padding-bottom: 10px;
+  margin-top: -4px;
+  margin-bottom: -5px;
+}
+
+.chat-message .chat-place-card,
+.map-recommendations .compact-place {
+  --card-ring: inset 0 0 0 1px transparent;
+  --card-rest-shadow: 0 1px 2px #203b320d, 0 3px 6px #203b3208;
+  --card-hover-shadow: 0 2px 3px #203b3210, 0 5px 9px #203b3212;
+  --card-shadow: var(--card-rest-shadow);
+  box-shadow: var(--card-ring), var(--card-shadow);
+  transition:
+    transform var(--surface-speed) var(--surface-ease),
+    box-shadow 220ms var(--surface-ease),
+    border-color var(--surface-speed) var(--surface-ease),
+    background-color var(--surface-speed) var(--surface-ease);
+}
+
+/* Map cards float above a detailed image, so their resting shadow is stronger. */
+.map-recommendations .compact-place {
+  --card-rest-shadow: 0 2px 4px #16382313, 0 7px 18px #16382319;
+  --card-hover-shadow: 0 3px 6px #16382319, 0 11px 24px #16382322;
+}
+
+/* Preserve the persistent selection and the separate transient linked preview.
+   Inset rings stay visible at the edges of the horizontal scrolling viewport. */
+.chat-message .chat-place-card.selected,
+.map-recommendations .compact-place.selected {
+  --card-ring: inset 0 0 0 1px #4c705440;
+  box-shadow: var(--card-ring), var(--card-shadow);
+}
+
+.chat-message .chat-place-card.is-place-preview,
+.map-recommendations .compact-place.is-place-preview {
+  --card-ring: inset 0 0 0 1px #50785870;
+  --card-shadow: var(--card-hover-shadow);
+  box-shadow: var(--card-ring), var(--card-shadow);
+}
+
+.chat-message .chat-place-card.selected.is-place-preview,
+.map-recommendations .compact-place.selected.is-place-preview {
+  --card-ring: inset 0 0 0 1px #335e40a6;
+  box-shadow: var(--card-ring), var(--card-shadow);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chat-message .chat-place-card:not(:disabled):hover,
+  .map-recommendations .compact-place:not(:disabled):hover {
+    --card-shadow: var(--card-hover-shadow);
+    transform: translateY(-2px);
+  }
+}
+
+.chat-message .chat-place-card:focus-visible,
+.map-recommendations .compact-place:focus-visible {
+  --card-shadow: var(--card-hover-shadow);
+  outline-offset: 1px;
+}
+
+.chat-message .chat-place-card:not(:disabled):active,
+.map-recommendations .compact-place:not(:disabled):active {
+  --card-shadow: var(--card-rest-shadow);
+  transform: translateY(0) scale(.995);
+  transition-duration: 90ms;
+}
+
+/* A dragged card follows the pointer, without an additional hover lift. */
+.chat-place-list.dragging .chat-place-card {
+  transform: none !important;
+  transition: none;
+}
+
+/* Button and menu responses use the same timing, without changing their shape. */
+.chat-compose button,
+.chat-options-button,
+.chat-message .carousel-arrow,
+.chat-samples button,
+.chat-starter,
+.app-sidebar button,
+#trip-options-menu .trip-menu-action,
+.place-detail-foot button,
+.map-controls button,
+.map-recommendations .next-search {
+  transition:
+    transform 140ms var(--surface-ease),
+    background-color var(--surface-speed) var(--surface-ease),
+    border-color var(--surface-speed) var(--surface-ease),
+    color var(--surface-speed) var(--surface-ease),
+    box-shadow var(--surface-speed) var(--surface-ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chat-compose button:not(:disabled):hover,
+  .chat-message .carousel-arrow:not(:disabled):hover,
+  .map-controls button:not(:disabled):hover {
+    box-shadow: 0 1px 2px #203b3210, 0 3px 8px #203b3212;
+  }
+}
+
+.chat-compose button:not(:disabled):active,
+.chat-options-button:not(:disabled):active,
+.chat-message .carousel-arrow:not(:disabled):active,
+.chat-samples button:not(:disabled):active,
+.chat-starter:not(:disabled):active,
+.app-sidebar button:not(:disabled):active,
+#trip-options-menu .trip-menu-action:not(:disabled):active,
+.place-detail-foot button:not(:disabled):active,
+.map-controls button:not(:disabled):active,
+.map-recommendations .next-search:not(:disabled):active {
+  transform: translateY(1px) scale(.985);
+  transition-duration: 80ms;
+}
+
+/* Preserve static feedback and keyboard outlines when motion is reduced. */
+@media (prefers-reduced-motion: reduce) {
+  .chat-compose textarea,
+  .chat-message .chat-place-card,
+  .map-recommendations .compact-place,
+  .chat-compose button,
+  .chat-options-button,
+  .chat-message .carousel-arrow,
+  .chat-samples button,
+  .chat-starter,
+  .app-sidebar button,
+  #trip-options-menu .trip-menu-action,
+  .place-detail-foot button,
+  .map-controls button,
+  .map-recommendations .next-search {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Floating surfaces share a soft contact shadow and a broad ambient shadow. */
+.dialog{box-shadow:0 4px 12px #142b3012,0 24px 72px #142b3026}
+.place-detail{box-shadow:0 2px 5px #203b3208,0 12px 36px #203b3210}
+#navigation-drawer{box-shadow:2px 0 8px #223c2108,16px 0 48px #223c211a}
+#trip-options-menu{
+ box-shadow:0 2px 5px #233b2b10,0 12px 32px #233b2b20;
+ opacity:0;transform:translateY(-4px);
+ transition:opacity 150ms ease,transform 180ms var(--surface-ease),display 180ms allow-discrete,overlay 180ms allow-discrete;
+}
+#trip-options-menu:popover-open{opacity:1;transform:translateY(0)}
+@starting-style{#trip-options-menu:popover-open{opacity:0;transform:translateY(-4px)}}
+.dialog[open]::backdrop,#navigation-drawer[open]::backdrop{animation:surface-backdrop-in 220ms ease both}
+.dialog.is-dismissing::backdrop,#navigation-drawer.is-dismissing::backdrop{animation:surface-backdrop-out 160ms ease both}
+.is-dismissing{pointer-events:none}
+@keyframes surface-backdrop-in{from{opacity:0}to{opacity:1}}
+@keyframes surface-backdrop-out{from{opacity:1}to{opacity:0}}
+@media(max-width:900px){
+ .map-recommendations .compact-places{padding-top:6px;padding-bottom:10px;margin-top:-3px;margin-bottom:-4px}
+}
+@media(prefers-reduced-motion:reduce){
+ #trip-options-menu{transition:none!important;transform:none!important}
+ .dialog::backdrop,#navigation-drawer::backdrop{animation:none!important}
+}

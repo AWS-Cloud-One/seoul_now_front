@@ -1,0 +1,61 @@
+
+.map-source-summary{display:flex;gap:6px;margin:11px 0 4px;color:var(--muted);font-size:10px}
+.real-map{background:#f5f6f8}
+/* Only the basemap is muted; traffic, population and destination overlays retain color. */
+.real-map .leaflet-tile-pane{filter:saturate(.7) contrast(.92) brightness(1.03);opacity:.94}
+.map-controls button:disabled{opacity:.35;cursor:default;pointer-events:none}
+.real-map .demo-origin-marker{display:grid;place-items:center;background:transparent;border:0;cursor:pointer;pointer-events:auto}
+.demo-origin-marker>span{display:block;width:16px;height:16px;border:3px solid #fff;border-radius:50%;background:#2d63df;box-shadow:0 0 0 6px #3972e529,0 1px 6px #1839705c}
+.demo-origin-marker:focus-visible{outline:2px solid #2d63df;outline-offset:4px;border-radius:50%}
+.real-map .demo-origin-label{padding:5px 7px;border:1px solid #b7cbef;border-radius:6px;background:#fff;color:#234eaa;box-shadow:0 2px 7px #18397021;font:700 11px 'SUIT Variable',sans-serif;line-height:1.3}
+.demo-origin-label small{margin-left:3px;color:#6c7e9a;font-size:9px;font-weight:500}
+.real-map .demo-origin-label:before{border-left-color:#b7cbef}
+.map-source-summary span{padding:3px 6px;border:1px solid var(--line);border-radius:4px}
+.map-layer-key{margin:0;padding:10px 0;border-bottom:1px solid var(--line)}
+.map-layer-key>strong{display:flex;align-items:baseline;gap:7px;font-size:11px;color:var(--ink)}
+.map-layer-key>strong small{font-size:10px;font-weight:400;color:var(--muted)}
+.map-layer-key p,.map-layer-hint,.map-data-note{font-size:10px;line-height:1.65;color:var(--muted);margin:6px 0 0}
+.map-data-note{margin-top:10px}
+.map-color-key{display:flex;flex-wrap:wrap;gap:5px 10px;margin-top:8px;font-size:10px;color:var(--pc-secondary)}
+.map-color-key span{display:flex;align-items:center;gap:4px}
+.map-color-key i{display:block;width:9px;height:5px;border-radius:2px}
+.population-heat-canvas{position:absolute;pointer-events:none;opacity:.9}
+.population-heat-key{height:6px;border-radius:6px;margin-top:10px;background:linear-gradient(90deg,#679dd5,#dfbb58,#e58b44,#cf5c70)}
+.map-parking-zoom-hint{position:absolute;top:96px;left:14px;z-index:590;display:flex;align-items:center;gap:6px;min-height:0;padding:6px 9px;background:#fffffff0;border:1px solid #dce3ee;border-radius:7px;box-shadow:0 2px 7px #2432480c;color:#526681;font:500 10px 'SUIT Variable',sans-serif;cursor:pointer}
+.map-parking-zoom-hint[hidden]{display:none}
+.map-parking-zoom-hint>span{font-weight:750;color:#315789}
+.map-parking-zoom-hint:hover{border-color:#7899ce;background:#fff}
+.registered-parking-marker{display:flex;align-items:center;justify-content:center;gap:4px;background:#fff;border:1px solid #a1b3cd;border-radius:7px;color:#315789;box-shadow:0 1px 4px #21385816;font:650 11px 'SUIT Variable',sans-serif}
+.registered-parking-marker.is-cluster{border-radius:14px;background:#f7f9fd;border-color:#b4c3da}
+.registered-parking-marker b{font-size:10px;font-weight:650;border-left:1px solid #d1dceb;padding-left:5px}
+.registered-parking-marker:hover,.registered-parking-marker:focus-visible{background:#fff;border-color:var(--green);box-shadow:0 2px 9px #2449a638;outline:2px solid #2f5de033;outline-offset:2px}
+.real-map .map-record-tooltip{background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 9px;box-shadow:0 2px 10px #18233520;font:500 11px 'SUIT Variable',sans-serif}
+.map-record-popup .leaflet-popup-content-wrapper{border-radius:13px;background:#fff;color:var(--ink);box-shadow:0 6px 28px #18233530;border:1px solid #dce3ee}
+.map-record-popup .leaflet-popup-content{margin:17px 18px 16px;font-family:'SUIT Variable',sans-serif;line-height:1.5}
+.map-record-popup .leaflet-popup-tip{background:#fff}
+.map-record-popup a.leaflet-popup-close-button{top:7px;right:7px;color:var(--muted);font-size:20px}
+.map-record header{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted);padding-right:18px;margin-bottom:7px}
+.map-record-snapshot{border:1px solid var(--line);padding:1px 4px;border-radius:3px;font-size:9px}
+.map-record h3{font-size:16px;letter-spacing:-.5px;line-height:1.45;margin:0 14px 5px 0;color:var(--ink)}
+.map-record .map-record-sub{font-size:11px;line-height:1.6;color:var(--muted);margin:0 0 12px}
+.map-record-metric{padding:12px;margin:12px 0;background:#f5f7fc;border-radius:8px}
+.map-record-metric>span{display:block;font-size:10px;color:var(--muted);margin-bottom:3px}
+.map-record-metric strong{font-size:25px;font-weight:650;letter-spacing:-.7px}
+.map-record-metric strong small{font-size:12px;font-weight:450;margin-left:4px;letter-spacing:0}
+.population-metric strong{font-size:21px}
+.map-record dl{margin:12px 0;font-size:11px}
+.map-record dl>div{display:flex;justify-content:space-between;gap:14px;margin:6px 0}
+.map-record dt{color:var(--muted);flex-shrink:0}
+.map-record dd{margin:0;text-align:right;overflow-wrap:anywhere;color:var(--ink)}
+.map-record .map-record-note{font-size:10px;line-height:1.65;color:var(--muted);margin:10px 0}
+.map-record footer{border-top:1px solid var(--line);padding-top:10px;margin-top:12px;font-size:9px;color:var(--muted);line-height:1.7}
+.population-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--population-color);font-weight:650;margin-top:5px}
+.population-status:before{content:'';width:6px;height:6px;border-radius:50%;background:var(--population-color)}
+.parking-availability{display:inline-block;color:#7c613d;background:#f7f1e8;padding:4px 7px;border-radius:4px;font-size:10px;margin:0 0 2px}
+.parking-source-records{border-top:1px solid var(--line);padding-top:8px;font-size:10px;color:var(--muted)}
+.parking-source-records summary{cursor:pointer}
+.parking-source-records p{margin:8px 0!important;color:var(--ink);font-size:10px}
+.parking-source-records small{display:block;color:var(--muted)}
+.nearby-parking-record{display:block;text-align:left;width:100%;padding:9px;margin:5px 0;font-size:11px;min-height:0}
+.nearby-parking-record span{display:block;font-size:10px;color:var(--muted);margin-top:3px}
+

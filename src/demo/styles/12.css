@@ -1,0 +1,20 @@
+
+#navigation-drawer .sidebar-trip-row{display:grid;grid-template-columns:minmax(0,1fr) 32px;align-items:center;border-radius:12px;padding-right:4px;flex-shrink:0}
+#navigation-drawer .sidebar-trip-row.is-active{background:#dfe8d6}
+#navigation-drawer .app-sidebar .sidebar-trip{min-width:0;padding:11px 7px;gap:8px;background:transparent}
+#navigation-drawer .sidebar-trip:hover{background:#dce6d3}
+#navigation-drawer .app-sidebar .trip-more-button{width:32px;min-height:36px;height:36px;padding:6px;justify-content:center;gap:0;border-radius:8px;color:#6c7f62}
+#navigation-drawer .trip-more-button:hover,#navigation-drawer .trip-more-button[aria-expanded=true]{color:#304d3b;background:#cfdcc5}
+#navigation-drawer .trip-more-button svg{height:20px;width:20px}
+#trip-options-menu{position:fixed;inset:auto;margin:0;padding:5px;width:184px;max-width:calc(100vw - 16px);border:1px solid #d7e0d0;border-radius:12px;background:#fffefb;box-shadow:0 9px 30px #233b2b26;color:var(--ink)}
+#trip-options-menu:popover-open{display:flex;flex-direction:column;gap:2px}
+#trip-options-menu::backdrop{background:transparent}
+#trip-options-menu .trip-menu-action{width:100%;min-height:42px;justify-content:flex-start;padding:10px 12px;gap:10px;border:0;border-radius:7px;background:transparent;font-size:13px;font-weight:500}
+#trip-options-menu .trip-menu-action:hover,#trip-options-menu .trip-menu-action:focus-visible{background:#eef3e8}
+#trip-options-menu .trip-menu-action.is-danger{color:#9a4d40;border-top:1px solid #eee9e2;border-radius:0 0 7px 7px;margin-top:3px}
+#trip-options-menu .trip-menu-action svg{width:17px;height:17px}
+.trip-dialog-name{font-size:18px;color:var(--green-dark);overflow-wrap:anywhere;margin-bottom:12px}
+#trip-name-error{font-size:12px;color:var(--red);margin-top:8px}
+button.trip-delete-confirm{color:#fff;background:#9d5145;border-color:#9d5145}
+button.trip-delete-confirm:hover{background:#864339;border-color:#864339}
+

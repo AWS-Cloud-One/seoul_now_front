@@ -1,0 +1,18 @@
+
+/* Shared transient emphasis; the existing .selected class remains authoritative. */
+.chat-message .chat-place-card.is-place-preview,
+.map-recommendations .compact-place.is-place-preview {
+  border-color: #507858;
+  background: #f4f9ee;
+  box-shadow: 0 0 0 2px #50785840, 0 5px 16px #254b3220;
+}
+.chat-message .chat-place-card.selected.is-place-preview,
+.map-recommendations .compact-place.selected.is-place-preview {
+  border-color: #335e40;
+  box-shadow: 0 0 0 2px #335e4055, 0 5px 16px #254b3225;
+}
+/* Do not transform Leaflet marker elements: Leaflet owns their map position. */
+.real-map .destination-marker.is-place-preview {
+  box-shadow: 0 0 0 5px #fffffff0, 0 0 0 8px #4f765a99, 0 5px 16px #173c3255;
+}
+

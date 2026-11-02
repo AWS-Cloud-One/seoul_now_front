@@ -1,0 +1,61 @@
+
+/* Keep conversation, map and detail within one viewport-height workspace. */
+@media(min-width:901px){
+ .unified-workspace{--pane-height:clamp(360px,calc(100dvh - 120px),840px)}
+ .unified-layout{height:var(--pane-height);min-height:0}
+ .conversation-column{height:100%;min-height:0;position:relative;top:auto;gap:0}
+ .unified-chat{height:100%;min-height:0}
+ .unified-content{height:100%;min-height:0}
+ .explore-content{height:100%;min-height:0}
+ .explore-stage{height:auto;min-height:0;flex:1}
+ .detail-host{height:100%;min-height:0;overflow:hidden}
+ .detail-host .place-detail{height:100%;max-height:100%;min-height:0}
+ .place-detail-body{flex:1 1 0;min-height:0;overflow-y:auto}
+ .place-detail-foot{flex:0 0 auto}
+}
+.unified-chat .chat-messages.has-welcome,.chat-dialog .chat-messages.has-welcome{padding:22px;gap:0}
+.chat-welcome{margin:auto 0;flex-shrink:0;padding:10px 0;animation:welcome-in .35s ease-out}
+.welcome-eyebrow{display:block;font-size:11px;font-weight:650;letter-spacing:.06em;color:#73846a;margin-bottom:12px}
+.chat-welcome h2{font-size:clamp(24px,2.1vw,30px);line-height:1.35;letter-spacing:-.05em;color:var(--green-dark)}
+.chat-welcome>p{font-size:13px;color:#6a7864;line-height:1.85;margin-top:12px}
+.chat-starters{display:flex;flex-direction:column;gap:9px;margin-top:24px}
+.chat-starter{width:100%;text-align:left;justify-content:flex-start;gap:12px;padding:12px 13px;border:1px solid #dce4d5;border-radius:13px;background:#ffffffbb;box-shadow:0 3px 12px #29462a03}
+.chat-starter:hover{background:#fff;border-color:#91aa82;box-shadow:0 4px 16px #29462a0a}
+.starter-icon{width:32px;height:34px;flex-shrink:0;display:grid;place-items:center;background:#e9efdf;border-radius:10px;color:#56704c}
+.starter-icon svg{width:18px;height:18px}
+.chat-starter>span:nth-child(2){min-width:0;flex:1}
+.chat-starter strong{display:block;font-size:13px;line-height:1.5;font-weight:650}
+.chat-starter small{display:block;font-size:11px;font-weight:400;color:#7c8775;line-height:1.5;margin-top:3px}
+.chat-starter>svg{width:14px;height:14px;flex-shrink:0;color:#829376}
+.welcome-input-hint{display:block;margin-top:19px;font-size:11px;color:#7b8973}
+.chat-messages.has-welcome .chat-progress-host:empty{display:none}
+.map-recommendations .compact-place{min-height:90px;padding:13px 11px;gap:9px;align-items:center}
+.map-recommendations .compact-place-copy strong{font-size:14px;line-height:1.45;letter-spacing:-.03em}
+.map-recommendations .compact-place-copy>span{font-size:12px;line-height:1.5}
+.compact-place-time{color:#49613f;font-weight:650;white-space:nowrap}
+.map-recommendations .compact-place>svg{display:none}
+.retained-result-note{width:fit-content;max-width:100%;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 9px;padding:7px 10px;border-radius:9px;border:1px solid #e4d8ba;background:#fffaf0f5;color:#786542;box-shadow:0 3px 12px #293b2420;font-size:11px;line-height:1.5}
+.retained-result-note svg{height:14px;width:14px;flex-shrink:0}
+.retained-result-note strong{font-weight:650}
+.retained-result-note time{font-size:10px;color:#938366}
+.chat-recommendation.is-retained .chat-recommendation-label>span:last-child{color:#8a7042}
+@media(max-width:600px){
+ .chat-dialog .chat-messages.has-welcome{padding:20px}
+ .chat-welcome h2{font-size:27px}
+ .chat-starters{margin-top:21px}
+ .map-recommendations .compact-place{min-height:82px;padding:12px}
+ .map-recommendations .compact-place-copy strong{font-size:14px}
+ .map-recommendations .compact-place-copy>span{font-size:12px}
+ .map-recommendations .compact-place>svg{display:block}
+ .retained-result-note{font-size:10px;gap:5px;padding:6px 8px}
+}
+@media(min-width:901px) and (max-height:800px){
+ .chat-welcome{padding:0}
+ .welcome-eyebrow{margin-bottom:8px}
+ .chat-welcome>p{margin-top:8px;line-height:1.7}
+ .chat-starters{margin-top:16px;gap:8px}
+ .chat-starter{padding:10px 12px}
+ .welcome-input-hint{margin-top:12px}
+}
+@media(prefers-reduced-motion:reduce){.chat-welcome{animation:none}}
+@keyframes welcome-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
