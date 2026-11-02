@@ -56,6 +56,7 @@ function loadStore(): Store {
   return { schema: 2, trips: [trip], activeTripId: trip.trip }
 }
 function initialPage() {
+  if (new URLSearchParams(window.location.search).get('view') === 'map') return 'preview'
   try {
     return sessionStorage.getItem('seoul-start-screen-entered') === '1'
       ? sessionStorage.getItem('seoul-entry-page') === 'main'

@@ -1,4 +1,4 @@
-import { act, cleanup, render, renderHook, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DemoProvider from './DemoProvider'
@@ -7,7 +7,7 @@ import { EMPTY_CONDITIONS, MockService, newState } from './domain.js'
 import type { Conditions, Response } from './types'
 import App from '../App'
 
-vi.mock('./components/MapPanel', () => ({
+vi.mock('./components/GeoMap', () => ({
   default: () => <div data-testid="map">지도 SDK 영역</div>,
 }))
 const conditions: Conditions = { ...EMPTY_CONDITIONS, departure: '서울역', purposes: ['카페'] }
@@ -158,76 +158,49 @@ describe('React 여행 상태', () => {
 })
 
 describe('React 화면 흐름', () => {
-  it('모바일에서는 첫 추천 후 대화창을 열고 닫아도 대화와 추천을 유지한다', async () => {
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn((query: string) => ({
-        matches: false,
-        media: query,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      })),
-    )
-    const user = userEvent.setup()
+  async function reachResults(user: ReturnType<typeof userEvent.setup>) {
+    window.location.hash = ''
     render(<App />)
     await user.click(screen.getByRole('button', { name: /시작하기/ }))
-    await user.click(screen.getByRole('button', { name: '챗봇 열기' }))
+    await user.click(screen.getByRole('button', { name: 'AI 추천' }))
     await user.selectOptions(screen.getByLabelText(/어디에서 출발하세요/), '서울역')
     await user.click(screen.getByRole('checkbox', { name: '카페' }))
     await user.click(screen.getByRole('button', { name: /이 조건으로 찾아보기/ }))
-    const dialog = await screen.findByRole('dialog', { name: '추천해줄게!' })
-    await waitFor(() =>
-      expect(within(dialog).getAllByRole('button', { name: /장소 보기/ })).toHaveLength(3),
-    )
-    await user.type(within(dialog).getByLabelText('대화 메시지'), '나중에 보낼 메시지')
-    await user.click(within(dialog).getByRole('button', { name: '대화 닫기' }))
-    await user.click(screen.getByRole('button', { name: '챗봇과 대화 열기' }))
-    expect(screen.getByLabelText('대화 메시지')).toHaveValue('나중에 보낼 메시지')
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /선택$/ })).toHaveLength(3))
+  }
+  it('메뉴를 오가도 같은 지도와 추천 결과·작성 중인 AI 요청을 유지한다', async () => {
+    const user = userEvent.setup()
+    await reachResults(user)
+    const map = screen.getByTestId('map')
+    await user.click(screen.getByRole('button', { name: /AI에게 조건 수정/ }))
+    await user.type(screen.getByLabelText('AI에게 보낼 메시지'), '나중에 보낼 메시지')
+    await user.click(screen.getByRole('button', { name: '주차장' }))
+    expect(await screen.findByRole('heading', { name: /주차장/ })).toBeInTheDocument()
+    expect(screen.getByTestId('map')).toBe(map)
+    await user.click(screen.getByRole('button', { name: 'AI 추천' }))
+    expect(screen.getAllByRole('button', { name: /선택$/ })).toHaveLength(3)
+    await user.click(screen.getByRole('button', { name: /AI에게 조건 수정/ }))
+    expect(screen.getByLabelText('AI에게 보낼 메시지')).toHaveValue('나중에 보낼 메시지')
   }, 15000)
-  it('시작 → 미리보기 → 조건 입력 → 추천 → 대화로 조건 변경 → 상세 → 제외까지 진행한다', async () => {
+  it('추천 → 선택 → 상세 → 제외 → 주변 주차장으로 이동하고 목록으로 돌아온다', async () => {
     const user = userEvent.setup()
-    render(<App />)
-    await user.click(screen.getByRole('button', { name: /시작하기/ }))
-    await user.click(screen.getByRole('button', { name: '챗봇 열기' }))
-    await user.selectOptions(screen.getByLabelText(/어디에서 출발하세요/), '서울역')
-    await user.click(screen.getByRole('checkbox', { name: '카페' }))
-    await user.click(screen.getByRole('button', { name: /이 조건으로 찾아보기/ }))
-    await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: /장소 보기/ })).toHaveLength(3),
-    )
-    const firstCard = screen
-      .getAllByRole('button', { name: /장소 보기/ })[0]
+    await reachResults(user)
+    const cards = screen.getAllByRole('button', { name: /선택$/ })
+    const name = cards[0]
       .getAttribute('aria-label')!
-    expect(screen.queryByText(/여행 조건을 확인했어요/)).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '왜 추천했어?' }))
-    await waitFor(() =>
-      expect(screen.getByRole('region', { name: '챗봇 답변' })).toHaveTextContent(
-        '제안한 당시 이유',
-      ),
-    )
-    expect(screen.queryByText('조건 보기')).not.toBeInTheDocument()
-    await user.type(screen.getByLabelText('대화 메시지'), '강남역에서 전시')
-    await user.click(screen.getByRole('button', { name: '메시지 보내기' }))
-    await waitFor(
-      () => {
-        expect(screen.queryByRole('button', { name: firstCard })).not.toBeInTheDocument()
-        expect(screen.getAllByRole('button', { name: /장소 보기/ })).toHaveLength(3)
-        expect(screen.queryByText(/보관 기간이 지난 추천/)).not.toBeInTheDocument()
-        expect(screen.queryByText(/여행 조건을 확인했어요/)).not.toBeInTheDocument()
-      },
-      { timeout: 3000 },
-    )
-    const cards = screen.getAllByRole('button', { name: /장소 보기/ })
+      .replace(/^\d+번 /, '')
+      .replace(/ 선택$/, '')
     await user.click(cards[0])
-    await user.click(screen.getByRole('button', { name: /자세히 보기/ }))
-    const detail = screen
-      .getByRole('region', { name: '이곳을 추천하는 이유' })
-      .closest('.place-detail') as HTMLElement
-    await user.click(within(detail).getByText(/출처와 자세한 정보/))
-    await user.click(within(detail).getByRole('button', { name: '이번 여행에서 제외' }))
-    expect(within(detail).getByRole('button', { name: '다음 탐색에서 제외돼요' })).toBeDisabled()
-    await user.click(within(detail).getByRole('button', { name: '길안내' }))
-    await user.click(screen.getByRole('button', { name: /목적지 확인 · 실행 시연/ }))
-    expect(screen.getByText(/외부 앱 실행 실패를 재현했어요/)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '선택한 장소 요약' })).toHaveTextContent(name)
+    await user.click(screen.getByRole('button', { name: name + ' 상세 보기' }))
+    expect(screen.getByRole('heading', { name })).toBeInTheDocument()
+    await user.click(screen.getByText('출처와 상세 정보'))
+    await user.click(screen.getByRole('button', { name: '이번 여행에서 제외' }))
+    expect(screen.getByRole('button', { name: '다음 탐색에서 제외돼요' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: /주변 주차장/ }))
+    expect(await screen.findByText(new RegExp(name + ' 주변'))).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /추천 결과로 돌아가기/ }))
+    expect(await screen.findAllByRole('button', { name: /선택$/ })).toHaveLength(3)
+    expect(screen.getByRole('region', { name: '선택한 장소 요약' })).toHaveTextContent(name)
   }, 15000)
 })

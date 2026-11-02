@@ -8,7 +8,7 @@ import { SAVED_TRIPS_KEY } from './savedTrips'
 import { useDemo } from './useDemo'
 import type { Conditions } from './types'
 
-vi.mock('./components/MapPanel', () => ({ default: () => <div>지도 영역</div> }))
+vi.mock('./components/GeoMap', () => ({ default: () => <div>지도 영역</div> }))
 const conditions: Conditions = { ...EMPTY_CONDITIONS, departure: '서울역', purposes: ['카페'] }
 beforeEach(() => {
   sessionStorage.clear()
@@ -76,10 +76,10 @@ it('저장 공간 오류가 나면 성공으로 표시하지 않고 기존 저�
   await act(async () => {
     await result.current.search(conditions)
   })
-  const native = Storage.prototype.setItem
-  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+  const native = localStorage.setItem
+  vi.spyOn(localStorage, 'setItem').mockImplementation(function (key, value) {
     if (key === SAVED_TRIPS_KEY) throw new DOMException('Quota exceeded', 'QuotaExceededError')
-    return native.call(this, key, value)
+    return native.call(localStorage, key, value)
   })
   act(() => result.current.saveCurrentTrip())
   expect(result.current.savedTrips).toHaveLength(1)
@@ -120,37 +120,43 @@ it('저장 해제는 보관 목록에서만 제거하고 현재 여행과 추천
   expect(JSON.parse(localStorage.getItem(SAVED_TRIPS_KEY)!).items).toHaveLength(0)
 })
 
-it('미리보기 북마크 → 빈 목록 → 추천 저장 → 새 여행 → 저장 목록에서 복원한다', async () => {
+it('저장 탭 빈 목록 → 추천 저장 → 새 여행 → 저장 목록에서 복원한다', async () => {
+  window.location.hash = ''
   const user = userEvent.setup()
   render(<App />)
   await user.click(screen.getByRole('button', { name: /시작하기/ }))
-  await user.click(screen.getByRole('button', { name: '저장한 여행 0개' }))
-  expect(screen.getByText('아직 저장한 여행이 없어요')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '현재 추천 저장' })).toBeDisabled()
-  await user.click(screen.getByRole('button', { name: '저장한 여행 닫기' }))
-  await user.click(screen.getByRole('button', { name: '챗봇 열기' }))
+  await user.click(
+    within(screen.getByRole('navigation', { name: '주요 메뉴' })).getByRole('button', {
+      name: /저장/,
+    }),
+  )
+  expect(await screen.findByText('저장한 여행이 없어요')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /현재 추천 저장/ })).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: 'AI 추천' }))
   await user.selectOptions(screen.getByLabelText(/어디에서 출발하세요/), '서울역')
   await user.click(screen.getByRole('checkbox', { name: '카페' }))
   await user.click(screen.getByRole('button', { name: /이 조건으로 찾아보기/ }))
-  await waitFor(() => expect(screen.getAllByRole('button', { name: /장소 보기/ })).toHaveLength(3))
+  await waitFor(() => expect(screen.getAllByRole('button', { name: /선택$/ })).toHaveLength(3))
   const firstName = placeById(
     JSON.parse(sessionStorage.getItem('seoul-next-stop-trips-v2')!).trips[0].groups[0].entries[0]
       .id,
   )!.name
-  const sidebar = screen.getByRole('complementary', { name: '여행 메뉴' })
-  await user.click(within(sidebar).getByRole('button', { name: '저장한 여행 0개' }))
-  await user.click(screen.getByRole('button', { name: '현재 추천 저장' }))
-  expect(screen.getByRole('button', { name: '현재 추천 저장됨' })).toBeDisabled()
-  await user.click(screen.getByRole('button', { name: '저장한 여행 닫기' }))
-  await user.click(within(sidebar).getByRole('button', { name: '새 여행' }))
   await user.click(
-    within(screen.getByRole('complementary', { name: '여행 메뉴' })).getByRole('button', {
-      name: '저장한 여행 1개',
+    within(screen.getByRole('navigation', { name: '주요 메뉴' })).getByRole('button', {
+      name: /저장/,
     }),
   )
-  await user.click(screen.getByRole('button', { name: '서울역 · 카페 저장한 여행 열기' }))
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: '현재 추천 저장' }))
+  expect(screen.getByRole('button', { name: '저장됨' })).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: 'AI 추천' }))
+  await user.click(screen.getByRole('button', { name: '새 여행' }))
+  await user.click(
+    within(screen.getByRole('navigation', { name: '주요 메뉴' })).getByRole('button', {
+      name: /저장/,
+    }),
+  )
+  await user.click(screen.getByRole('button', { name: /열기$/ }))
   expect(
-    screen.getByRole('button', { name: new RegExp(firstName + ' 장소 보기') }),
+    await screen.findByRole('button', { name: new RegExp(firstName + ' 선택') }),
   ).toBeInTheDocument()
 }, 15000)

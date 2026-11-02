@@ -1,5 +1,26 @@
 import type { ReactNode } from 'react'
 const icons: Record<string, ReactNode> = {
+  fit: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
+  layers: (
+    <>
+      <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+      <path d="m3 13 9 5 9-5" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4.5 4.5" />
+    </>
+  ),
+  home: <path d="m3 11 9-7.5 9 7.5M5.5 9.5V20h13V9.5M10 20v-6h4v6" />,
+  sparkle: (
+    <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.500 15.500 18 18M18 6l-2.500 2.500M8.500 15.500 6 18" />
+  ),
+  chevronLeft: <path d="m15 5-7 7 7 7" />,
+  chevronRight: <path d="m9 5 7 7-7 7" />,
+  chevronUp: <path d="m5 15 7-7 7 7" />,
+  chevronDown: <path d="m5 9 7 7 7-7" />,
   back: <path d="M20 12H4m6-6-6 6 6 6" />,
   bookmark: <path d="M7 3h10a1 1 0 0 1 1 1v17l-6-4-6 4V4a1 1 0 0 1 1-1Z" />,
   pin: (
@@ -60,8 +81,9 @@ const icons: Record<string, ReactNode> = {
   ),
   parking: (
     <>
-      <rect x="3" y="3" width="18" height="18" rx="4" />
-      <path d="M9 17V7h4a3 3 0 0 1 0 6H9" />
+      <path d="m5 10 1.5-4a2 2 0 0 1 1.9-1.3h7.2a2 2 0 0 1 1.9 1.3L19 10" />
+      <rect x="3" y="10" width="18" height="7" rx="2" />
+      <path d="M6 17v2.5M18 17v2.5M7 13.5h.01M17 13.5h.01" />
     </>
   ),
   car: (

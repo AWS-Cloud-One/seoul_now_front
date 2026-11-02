@@ -2,6 +2,8 @@ import L from './vendor/leaflet.js'
 import { placeById } from './domain.js'
 import { normalizeParkingResponse } from './parking/normalize'
 import { parkingAvailability, parkingBadge } from './parking/display'
+const PARKING_ICON =
+  '<svg class="parking-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.2 5.5h11.6a1.5 1.5 0 0 1 1.4 1l1.1 3.2c.9.3 1.5 1.1 1.5 2.100V17a1 1 0 0 1-1 1h-1.500a1 1 0 0 1-1-1v-1H5.700v1a1 1 0 0 1-1 1H3.200a1 1 0 0 1-1-1v-4.200c0-1 .6-1.800 1.500-2.100l1.100-3.200a1.500 1.500 0 0 1 1.400-1Zm.4 2-.8 2.300h12.400l-.8-2.300ZM6.500 14.300a1.400 1.400 0 1 0 0-2.800 1.400 1.400 0 0 0 0 2.800Zm11 0a1.400 1.400 0 1 0 0-2.800 1.400 1.400 0 0 0 0 2.800Z"/></svg>'
 const esc = (v) =>
   String(v ?? '').replace(
     /[&<>"']/g,
@@ -140,16 +142,8 @@ export function createMapLayers(
     const places = (result?.entries || []).map((entry) => placeById(entry.id)).filter(Boolean)
     return {
       places,
-      parking: places.length
-        ? PARKING_LOCATIONS.filter((p) => isNearPlaces(p.lat, p.lng, places))
-        : overview
-          ? PARKING_LOCATIONS
-          : [],
-      population: places.length
-        ? POPULATION_AREAS.filter((area) => places.some((place) => areaNearPlace(area, place)))
-        : overview
-          ? POPULATION_AREAS
-          : [],
+      parking: PARKING_LOCATIONS,
+      population: POPULATION_AREAS,
     }
   }
   function parkingGrid(map, zoom, locations, cache) {
@@ -257,50 +251,17 @@ export function createMapLayers(
     output.filter = `blur(${(zoom < 13 ? 14 : zoom < 15 ? 20 : 26) * scale}px)`
     output.drawImage(mask, 0, 0)
     output.filter = 'none'
-    if (overview) return
-    // Fade at the neighborhood edge after blurring, so heat cannot spread outside it.
-    const scope = scopeMask.getContext('2d')
-    scope.setTransform(scale, 0, 0, scale, 0, 0)
-    for (const place of neighborhood.places) {
-      const point = map.latLngToContainerPoint([place.lat, place.lon])
-      const north = map.latLngToContainerPoint([
-        place.lat + ((NEARBY_RADIUS_METERS / 6371000) * 180) / Math.PI,
-        place.lon,
-      ])
-      const radius = Math.abs(north.y - point.y),
-        x = point.x + pad,
-        y = point.y + pad
-      const gradient = scope.createRadialGradient(x, y, radius * 0.66, x, y, radius)
-      gradient.addColorStop(0, '#fff')
-      gradient.addColorStop(1, '#ffffff00')
-      scope.fillStyle = gradient
-      scope.beginPath()
-      scope.arc(x, y, radius, 0, Math.PI * 2)
-      scope.fill()
-    }
-    output.globalCompositeOperation = 'destination-in'
-    output.drawImage(scopeMask, 0, 0)
-    output.globalCompositeOperation = 'source-over'
   }
   function drawRoads(bounds, zoom) {
     const present = new Set(),
-      weight = zoom < 12 ? 2.3 : zoom < 14 ? 2.7 : zoom < 16 ? 3.1 : 3.7,
-      opacity = 0.92
+      weight = zoom < 12 ? 1.2 : zoom < 14 ? 1.8 : zoom < 16 ? 2.6 : 3.4,
+      opacity = zoom < 13 ? 0.7 : 0.9
     const styleKey = String(weight),
       styleChanged = styleKey !== lastRoadStyle
     lastRoadStyle = styleKey
     if (layers.roads)
       for (const road of SEOUL_MAP_DATA.roads) {
         if (!intersectsMapBox(road.bbox, bounds)) continue
-        const classes =
-          zoom < 12
-            ? ['02']
-            : zoom < 14
-              ? ['02', '03']
-              : zoom < 16
-                ? ['02', '03', '04']
-                : ['02', '03', '04', '05']
-        if (!road.classes.some((c) => classes.includes(c))) continue
         present.add(road.id)
         if (roadItems.has(road.id)) {
           if (styleChanged) roadItems.get(road.id).setStyle({ weight, opacity })
@@ -334,27 +295,32 @@ export function createMapLayers(
   }
   function drawParking(bounds, zoom) {
     const present = new Set()
-    onParkingHint(layers.parking && zoom < 14 && neighborhood.parking.length > 0, zoomToParking)
-    if (layers.parking && zoom >= 14)
-      for (const group of parkingGrid(map, zoom, neighborhood.parking, parkingCache)) {
+    onParkingHint(false, zoomToParking)
+    const nearby = layers.parking
+      ? parkingGrid(map, zoom, neighborhood.parking, parkingCache).filter((group) =>
+          bounds.contains([group.lat, group.lng]),
+        )
+      : []
+    if (nearby.length)
+      for (const group of nearby) {
         const { key, locations, lat, lng } = group
-        if (!bounds.contains([lat, lng])) continue
         present.add(key)
         if (parkingItems.has(key)) continue
         const count = locations.length,
           cluster = count > 1
         const label = cluster
-          ? `주차장 위치 ${count}곳 · 확대해서 보기`
-          : `${locations[0].records[0].name} 주차장 정보 · ${parkingAvailability(locations[0].records[0].available)}`
+          ? `주차장 ${count}개 · 눌러서 확대`
+          : `${locations[0].records[0].name}${locations[0].records[0].available === null ? '' : ` · ${parkingAvailability(locations[0].records[0].available)}`}`
         const available = locations[0].records[0].available
-        const badge = cluster ? count : available === null ? null : parkingBadge(available)
+        // Unknown vacancy is stated once in the legend/detail, not on every marker.
+        const badge = cluster ? count : available === 0 ? '만차' : null
         const marker = L.marker([lat, lng], {
           pane: 'registered-parking',
           icon: L.divIcon({
-            className: `registered-parking-marker ${cluster ? 'is-cluster' : ''}`,
-            html: `<span>P</span>${badge !== null ? `<b>${esc(badge)}</b>` : ''}`,
-            iconSize: badge !== null ? [44, 28] : [26, 26],
-            iconAnchor: badge !== null ? [22, 14] : [13, 13],
+            className: `registered-parking-marker ${cluster ? 'is-cluster' : ''} ${!cluster && available === null ? 'is-unknown' : ''} ${!cluster && available === 0 ? 'is-full' : ''}`,
+            html: `${PARKING_ICON}${badge !== null ? `<b>${esc(badge)}</b>` : ''}`,
+            iconSize: badge !== null ? [64, 28] : [28, 28],
+            iconAnchor: badge !== null ? [32, 14] : [14, 14],
           }),
           title: label,
           keyboard: true,
@@ -365,6 +331,7 @@ export function createMapLayers(
           className: 'map-record-tooltip',
           direction: 'top',
           offset: [0, -15],
+          permanent: false,
         })
         marker.on('click', () => {
           if (cluster && zoom < 19) {
@@ -406,12 +373,7 @@ export function createMapLayers(
     if (!frame && !destroyed) frame = requestAnimationFrame(draw)
   }
   const onAreaClick = (e) => {
-    if (
-      !layers.population ||
-      e.propagatedFrom ||
-      (!overview && !isNearPlaces(e.latlng.lat, e.latlng.lng, neighborhood.places))
-    )
-      return
+    if (!layers.population || e.propagatedFrom) return
     const area = [...heatVisible].reverse().find((area) => areaContains(area, e.latlng))
     if (area) onRecord({ kind: 'population', data: area.feature }, e.latlng)
   }
@@ -421,11 +383,7 @@ export function createMapLayers(
   return {
     updateParking(records) {
       PARKING_LOCATIONS = groupParking(records)
-      neighborhood.parking = neighborhood.places.length
-        ? PARKING_LOCATIONS.filter((p) => isNearPlaces(p.lat, p.lng, neighborhood.places))
-        : overview
-          ? PARKING_LOCATIONS
-          : []
+      neighborhood.parking = PARKING_LOCATIONS
       parkingCache.clear()
       parkingLayer.clearLayers()
       parkingItems.clear()

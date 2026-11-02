@@ -107,7 +107,7 @@ it('공통 아이콘의 CSS 클래스·선 두께·SVG 도형을 원본과 동�
     originalScript.indexOf('const icon='),
     originalScript.indexOf('const PURPOSES'),
   )
-  for (const name of ['chat', 'map', 'parking', 'people', 'car', 'arrow']) {
+  for (const name of ['chat', 'map', 'people', 'car', 'arrow']) {
     const expected = parse(
       new Function(`${renderer};return icon(${JSON.stringify(name)});`)() as string,
     ).querySelector('svg')!
