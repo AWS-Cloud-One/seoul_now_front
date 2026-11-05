@@ -20,8 +20,8 @@ const HYSTERESIS = 16
 const RAIL = 72
 
 export function nextLayout(prev: Layout, panelWidth: number, viewport: number): Layout {
-  // Phones use the bottom sheet; the compact legend stays and the place card is not shown.
-  if (viewport <= 900) return { wide: false, legendOpen: true }
+  // Phones use the bottom sheet; the legend stays folded and the place card is not shown.
+  if (viewport <= 900) return { wide: false, legendOpen: false }
   const third = viewport / 3
   const wide = prev.wide ? panelWidth > third - HYSTERESIS : panelWidth > third + HYSTERESIS
   const mapWidth = viewport - RAIL - panelWidth

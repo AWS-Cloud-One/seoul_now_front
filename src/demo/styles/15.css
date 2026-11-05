@@ -1,7 +1,7 @@
 
-@font-face{font-family:"SUIT Variable";font-weight:100 900;font-style:normal;font-display:swap;src:url('../assets/suit-variable.woff2') format("woff2")}
+
 /* A restrained city guide: neutral surfaces, editorial category art, warm accents. */
-:root{--paper:#f7f6f2;--white:#fff;--ink:#282b2d;--muted:#737573;--green:#c35438;--green-dark:#303436;--soft:#f4eee7;--olive:#8d745a;--line:#e4e3df;--radius:12px;--shadow:0 6px 24px #25282b12;font-family:'SUIT Variable',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;font-synthesis:none}
+:root{--paper:#f7f6f2;--white:#fff;--ink:#282b2d;--muted:#737573;--green:#c35438;--green-dark:#303436;--soft:#f4eee7;--olive:#8d745a;--line:#e4e3df;--radius:12px;--shadow:0 6px 24px #25282b12;font-family: var(--app-font);font-synthesis:none}
 body{font-size:15px;letter-spacing:-.015em;-webkit-font-smoothing:antialiased}
 button,input,textarea,select{letter-spacing:inherit}button{border-radius:8px;font-weight:600}
 h1,h2,h3,strong{font-weight:700}h1,h2,h3{letter-spacing:-.025em}
@@ -79,7 +79,7 @@ button.quiet{background:transparent;color:#606465}
 .real-map-label{color:#626b63}.destination-marker{background:#626c67;box-shadow:0 2px 8px #2c32283d;font-weight:700}
 .destination-marker.selected{background:var(--green);box-shadow:0 0 0 5px #ffffff70,0 3px 10px #2f34293a}
 .real-map .destination-marker.is-place-preview{background:#a25d46;box-shadow:0 0 0 6px #ffffff99,0 4px 13px #33332c30}
-.real-map .destination-label{border-color:#e0dfd6;background:#fffffff2;color:#424d48;font-family:inherit}
+.real-map .destination-label{border-color:#e0dfd6;background:#fffffff2;color:#424d48;font-family: var(--app-font)}
 .map-tools-body{background:white;border-color:var(--line);border-radius:12px;color:var(--ink);box-shadow:0 7px 26px #343d3024}
 .layer-controls button{border-color:#dfdfd7;color:#535f59;background:#fff;border-radius:8px}
 .layer-controls button.active{background:#f4eee5;border-color:#bca898;color:#67503f}

@@ -39,7 +39,7 @@ body.sn-body {
   grid-template-columns: var(--sn-rail) var(--sn-panel) minmax(0, 1fr);
   background: var(--sn-bg);
   color: var(--sn-text);
-  font-family: 'SUIT Variable', 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
+  font-family: var(--app-font);
   font-size: 14px;
   line-height: 1.55;
 }
@@ -827,7 +827,7 @@ body.sn-body {
   border: 1px solid rgba(220, 229, 232, 0.9);
   box-shadow: var(--sn-shadow);
   color: var(--sn-text);
-  font-family: 'SUIT Variable', system-ui, sans-serif;
+  font-family: var(--app-font);
 }
 .sn-map-top {
   position: absolute;
@@ -1063,8 +1063,7 @@ body.sn-body {
   background: var(--sn-brand) !important;
   color: var(--sn-on-brand) !important;
   font:
-    750 15px 'SUIT Variable',
-    sans-serif;
+    750 15px var(--app-font);
   border: 2px solid #fff !important;
   box-shadow: 0 2px 6px rgba(24, 38, 43, 0.4) !important;
 }
@@ -1087,8 +1086,7 @@ body.sn-body {
   border-radius: 8px;
   color: var(--sn-text);
   font:
-    650 12.5px 'SUIT Variable',
-    sans-serif;
+    650 12.5px var(--app-font);
   box-shadow: none;
 }
 .sn-map .map-parking-zoom-hint {
@@ -1107,8 +1105,7 @@ body.sn-body {
   backdrop-filter: blur(10px);
   box-shadow: var(--sn-shadow);
   font:
-    650 13.5px 'SUIT Variable',
-    sans-serif;
+    650 13.5px var(--app-font);
   color: var(--sn-text);
   cursor: pointer;
 }
@@ -1147,8 +1144,7 @@ body.sn-body {
   background: #18262b;
   color: #fff;
   font:
-    600 13.5px 'SUIT Variable',
-    sans-serif;
+    600 13.5px var(--app-font);
   box-shadow: var(--sn-shadow);
 }
 .sn-toast[hidden] {
@@ -1555,8 +1551,7 @@ body.sn-body {
   padding: 5px 9px;
   color: #fff;
   font:
-    650 12px 'SUIT Variable',
-    sans-serif;
+    650 12px var(--app-font);
   white-space: nowrap;
 }
 .sn-bar span.is-dark {
@@ -2577,3 +2572,8 @@ body.sn-body {
 .sn-legend-panel .sn-lg-ends {
   width: 100%;
 }
+
+.sn-parking-sort { flex: none; margin-left: auto; }
+.sn-parking-sort select { min-height: 40px; padding: 8px 28px 8px 12px; border: 1px solid var(--sn-line); border-radius: 10px; background-color: var(--sn-surface); color: var(--sn-text); font: inherit; font-size: 13px; cursor: pointer; }
+.sn-parking-price-note { margin: 8px 0 12px !important; }
+.sn-parking-price { color: var(--sn-brand-ink); }

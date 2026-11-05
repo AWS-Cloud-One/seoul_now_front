@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { conditionText, dateLabel, placeById } from '../../domain.js'
 import { useDemo } from '../../useDemo'
 import Icon from '../Icon'
 import { useLayout } from './layout'
 import { SelectionSummary } from './MapOverlays'
-import { PanelHeader } from './ui'
+import { ErrorState, PanelHeader } from './ui'
 import { focusMap } from './useRoute'
 import type { Route } from './useRoute'
 
@@ -39,13 +39,33 @@ export function PanelTabs({
   )
 }
 
-export default function ChatPanel({ go }: { go: (route: Route) => void }) {
-  const { active, result, ui, submitChat, updateChatDraft, selectPlace, openDetail } = useDemo()
+export default function ChatPanel({
+  go,
+  onShowMap,
+}: {
+  go: (route: Route) => void
+  onShowMap?: () => void
+}) {
+  const {
+    active,
+    result,
+    ui,
+    submitChat,
+    retryChat,
+    retrySearch,
+    updateChatDraft,
+    selectPlace,
+    openDetail,
+  } = useDemo()
   const { wide } = useLayout()
   const [text, setText] = useState(active.workspaceView?.chatDraft || '')
+  const [samplesOpen, setSamplesOpen] = useState(false)
+  const samplesId = useId()
+  const samplesToggle = useRef<HTMLButtonElement>(null)
   const log = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
   const selected = placeById(active.selected)
+  const conditions = result?.conditions || active.conditions
   const samples = result
     ? [
         selected ? `${selected.name}은 왜 추천했어?` : '여긴 왜 추천했어?',
@@ -63,6 +83,10 @@ export default function ChatPanel({ go }: { go: (route: Route) => void }) {
 
   const send = (value: string) => {
     if (!value.trim() || ui.busy) return
+    if (!active.onboardingComplete) {
+      void submitChat(value)
+      return
+    }
     pinned.current = true
     void submitChat(value)
     setText('')
@@ -80,12 +104,38 @@ export default function ChatPanel({ go }: { go: (route: Route) => void }) {
       <PanelTabs route="chat" go={go} />
       <PanelHeader
         title="AI 대화"
+        actions={
+          onShowMap && (
+            <button type="button" className="sn-chat-map-button" onClick={onShowMap}>
+              <Icon name="map" /> 지도 보기
+            </button>
+          )
+        }
         subtitle={
-          <span className="sn-summary">
-            {active.onboardingComplete
-              ? `${conditionText(result?.conditions || active.conditions)}${selected ? ` · 선택: ${selected.name}` : ''}`
-              : '출발지와 방문 목적을 먼저 정해 주세요.'}
-          </span>
+          <>
+            <span className="sn-summary sn-chat-conditions-desktop">
+              {active.onboardingComplete
+                ? `${conditionText(conditions)}${selected ? ` · 선택: ${selected.name}` : ''}`
+                : '출발지와 방문 목적을 먼저 정해 주세요.'}
+            </span>
+            {active.onboardingComplete ? (
+              <details className="sn-chat-conditions-mobile" key={active.trip}>
+                <summary aria-label={`${conditions.departure} · 입력 조건 보기`}>
+                  <Icon name="pin" />
+                  <span>{conditions.departure}</span>
+                  <Icon name="chevronDown" />
+                </summary>
+                <div className="sn-chat-conditions-body">
+                  <p>{conditionText(conditions)}</p>
+                  {selected && <p>선택한 장소 · {selected.name}</p>}
+                </div>
+              </details>
+            ) : (
+              <span className="sn-chat-conditions-mobile">
+                출발지와 방문 목적을 먼저 정해 주세요.
+              </span>
+            )}
+          </>
         }
       />
       {wide && selected && (
@@ -105,6 +155,7 @@ export default function ChatPanel({ go }: { go: (route: Route) => void }) {
         className="sn-chat-scroll"
         ref={log}
         role="log"
+        tabIndex={0}
         aria-live="polite"
         aria-label="AI 대화 기록"
         onScroll={(event) => {
@@ -134,9 +185,41 @@ export default function ChatPanel({ go }: { go: (route: Route) => void }) {
         )}
       </div>
       <footer className="sn-chat-foot">
-        <div className="sn-ai-samples">
+        {ui.chatFailure?.tripId === active.trip && (
+          <ErrorState title="답변을 받지 못했어요" onRetry={() => void retryChat()}>
+            연결이 끊겼거나 응답 시간이 초과됐어요. 다시 시도하면 같은 메시지를 보내요.
+          </ErrorState>
+        )}
+        {ui.notice && (
+          <ErrorState title="추천 요청을 완료하지 못했어요" onRetry={() => void retrySearch()}>
+            {ui.notice.text}
+          </ErrorState>
+        )}
+        <button
+          type="button"
+          className="sn-samples-toggle"
+          ref={samplesToggle}
+          aria-expanded={samplesOpen}
+          aria-controls={samplesId}
+          onClick={() => setSamplesOpen(!samplesOpen)}
+        >
+          <Icon name="edit" />
+          조건·질문 예시
+          <Icon name={samplesOpen ? 'chevronDown' : 'chevronUp'} />
+        </button>
+        <div className="sn-ai-samples" id={samplesId} data-expanded={samplesOpen}>
           {samples.map((sample) => (
-            <button type="button" key={sample} onClick={() => send(sample)} disabled={ui.busy}>
+            <button
+              type="button"
+              key={sample}
+              onClick={() => {
+                send(sample)
+                setSamplesOpen(false)
+                if (window.matchMedia('(max-width: 900px)').matches)
+                  samplesToggle.current?.focus({ preventScroll: true })
+              }}
+              disabled={ui.busy}
+            >
               {sample}
             </button>
           ))}

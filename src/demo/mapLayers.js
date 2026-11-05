@@ -319,8 +319,8 @@ export function createMapLayers(
           icon: L.divIcon({
             className: `registered-parking-marker ${cluster ? 'is-cluster' : ''} ${!cluster && available === null ? 'is-unknown' : ''} ${!cluster && available === 0 ? 'is-full' : ''}`,
             html: `${PARKING_ICON}${badge !== null ? `<b>${esc(badge)}</b>` : ''}`,
-            iconSize: badge !== null ? [64, 28] : [28, 28],
-            iconAnchor: badge !== null ? [32, 14] : [14, 14],
+            iconSize: badge !== null ? [68, 34] : [34, 34],
+            iconAnchor: badge !== null ? [34, 17] : [17, 17],
           }),
           title: label,
           keyboard: true,
@@ -334,6 +334,9 @@ export function createMapLayers(
           permanent: false,
         })
         marker.on('click', () => {
+          for (const item of parkingItems.values())
+            item.getElement()?.classList.remove('is-selected')
+          marker.getElement()?.classList.add('is-selected')
           if (cluster && zoom < 19) {
             map.flyToBounds(
               locations.map((p) => [p.lat, p.lng]),

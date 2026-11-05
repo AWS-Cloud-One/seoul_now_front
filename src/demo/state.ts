@@ -28,6 +28,20 @@ import type {
   Trip,
 } from './types'
 
+async function chatRequest<T>(run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      run(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Chat request timed out')), 30000)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const STORAGE_KEY = 'seoul-next-stop-trips-v2'
 const defaultLayers: Layers = { roads: true, parking: true, population: true }
 function loadStore(): Store {
@@ -70,6 +84,7 @@ function initialPage() {
 const initialUI = () => ({
   page: initialPage(),
   busy: false,
+  chatFailure: null as { tripId: string; text: string } | null,
   scenario: 'normal',
   notice: null as Notice | null,
   progress: null as Progress | null,
@@ -319,7 +334,6 @@ export function useDemoController() {
     })
     navigate('main')
     const pending = search(conditions, true)
-    if (!matchMedia('(min-width:901px)').matches) patchUI({ panel: { type: 'chat' } })
     await pending
   }
   function preserveWorkspace() {
@@ -460,16 +474,17 @@ export function useDemoController() {
       },
     })
   }
-  async function submitChat(text: string) {
+  async function submitChat(text: string, resending = false) {
     if (!text.trim() || ui.busy) return
     if (!getTrip().onboardingComplete) {
       notify('출발지와 방문 목적을 먼저 선택해 주세요.')
       return
     }
     const id = ++request.current
+    const tripId = getTrip().trip
     updateTrip((t) => {
       t.workspaceView = { ...t.workspaceView, chatDraft: '' }
-      message(t, text.trim(), {}, 'user')
+      if (!resending) message(t, text.trim(), {}, 'user')
     })
     patchUI({
       busy: true,
@@ -480,90 +495,101 @@ export function useDemoController() {
         conditions: null,
       },
     })
-    const parsed = await MockService.interpret(text)
-    if (id !== request.current) return
-    patchUI({ busy: false, progress: null })
-    if (parsed.kind === 'question') {
-      const current = getResult(),
-        trip = getTrip(),
-        place = placeById(trip.selected)
-      const entry = current?.entries.find((e) => e.id === place?.id)
-      if (!place || !entry || !current) {
+    patchUI({ chatFailure: null })
+    try {
+      const parsed = await chatRequest(() => MockService.interpret(text))
+      if (id !== request.current) return
+      patchUI({ busy: false, progress: null })
+      if (parsed.kind === 'question') {
+        const current = getResult(),
+          trip = getTrip(),
+          place = placeById(trip.selected)
+        const entry = current?.entries.find((e) => e.id === place?.id)
+        if (!place || !entry || !current) {
+          updateTrip((t) =>
+            message(t, '어느 장소가 궁금하세요? 목록이나 지도에서 장소를 선택해 주세요.'),
+          )
+          return
+        }
+        let answer = ''
+        if (parsed.question === 'reason')
+          answer = `${place.name}을 제안한 당시 이유예요.\n${entry.reason}\n당시 조건: ${conditionText(current.conditions)}\n원래 조회: ${dateLabel(entry.queryTime)}. 당시 판단과 조회 시각을 유지했어요.`
+        else if (parsed.question === 'parking')
+          answer =
+            '현재 빈자리는 확인할 수 없어요. 주변 주차장 목록과 직선거리만 제공하는 모의 데이터예요. 주차 정보가 없더라도 주차장이 없다는 뜻은 아닙니다.'
+        else {
+          patchUI({
+            busy: true,
+            progress: {
+              mode: 'question',
+              stage: 'routes',
+              detail: '선택한 장소의 이동시간을 별도로 확인하고 있어요.',
+              conditions: null,
+            },
+          })
+          const traffic = await chatRequest(() => MockService.traffic(place.id, current.conditions))
+          if (id !== request.current) return
+          answer = `별도 교통 조회: 자동차 약 ${traffic.eta}분. 조회 ${dateLabel(traffic.time)}.\n원래 추천은 ${entry.eta === null ? '이동시간 확인 불가' : entry.eta + '분'}, ${dateLabel(entry.queryTime)} 조회로 유지해요. 실시간 정보가 아닙니다.`
+        }
+        updateTrip((t) => message(t, answer, { place: place.name }))
+        patchUI({ busy: false, progress: null })
+        return
+      }
+      if (parsed.kind === 'alternatives') {
+        await search(getTrip().conditions, true)
+        return
+      }
+      if (parsed.kind === 'unsupported') {
         updateTrip((t) =>
-          message(t, '어느 장소가 궁금하세요? 목록이나 지도에서 장소를 선택해 주세요.'),
+          message(
+            t,
+            '이 자유 입력은 해석하지 못했어요. 실제 AI가 아니므로 임의로 조건을 바꾸지 않습니다. 아래 예시를 사용하거나 조건을 직접 입력해 주세요.',
+            { fallback: true },
+          ),
         )
         return
       }
-      let answer = ''
-      if (parsed.question === 'reason')
-        answer = `${place.name}을 제안한 당시 이유예요.\n${entry.reason}\n당시 조건: ${conditionText(current.conditions)}\n원래 조회: ${dateLabel(entry.queryTime)}. 당시 판단과 조회 시각을 유지했어요.`
-      else if (parsed.question === 'parking')
-        answer =
-          '현재 빈자리는 확인할 수 없어요. 주변 주차장 목록과 직선거리만 제공하는 모의 데이터예요. 주차 정보가 없더라도 주차장이 없다는 뜻은 아닙니다.'
-      else {
-        patchUI({
-          busy: true,
-          progress: {
-            mode: 'question',
-            stage: 'routes',
-            detail: '선택한 장소의 이동시간을 별도로 확인하고 있어요.',
-            conditions: null,
-          },
+      const pending = getTrip().pendingChat
+      const patch = { ...pending?.patch, ...parsed.patch }
+      const candidate = patchConditions(getTrip().conditions, patch)
+      let clarification = parsed.kind === 'clarify' ? parsed.message : validateConditions(candidate)
+      if (pending?.need && !Object.hasOwn(parsed.patch || {}, pending.need))
+        clarification =
+          pending.need === 'headcount'
+            ? '정확한 인원을 알려주세요. 예: 6명'
+            : pending.need === 'departure'
+              ? '출발지를 한 곳으로 알려주세요. 예: 서울역'
+              : '목적 한두 가지를 다시 알려주세요. 예: 카페, 산책'
+      if (clarification) {
+        updateTrip((t) => {
+          t.pendingChat = {
+            patch,
+            need:
+              parsed.need ||
+              (!candidate.departure
+                ? 'departure'
+                : !candidate.purposes.length
+                  ? 'purposes'
+                  : pending?.need),
+          }
+          message(t, clarification!, { fallback: true })
         })
-        const traffic = await MockService.traffic(place.id, current.conditions)
-        if (id !== request.current) return
-        answer = `별도 교통 조회: 자동차 약 ${traffic.eta}분. 조회 ${dateLabel(traffic.time)}.\n원래 추천은 ${entry.eta === null ? '이동시간 확인 불가' : entry.eta + '분'}, ${dateLabel(entry.queryTime)} 조회로 유지해요. 실시간 정보가 아닙니다.`
+        return
       }
-      updateTrip((t) => message(t, answer, { place: place.name }))
-      patchUI({ busy: false, progress: null })
-      return
-    }
-    if (parsed.kind === 'alternatives') {
-      await search(getTrip().conditions, true)
-      return
-    }
-    if (parsed.kind === 'unsupported') {
-      updateTrip((t) =>
-        message(
-          t,
-          '이 자유 입력은 해석하지 못했어요. 실제 AI가 아니므로 임의로 조건을 바꾸지 않습니다. 아래 예시를 사용하거나 조건을 직접 입력해 주세요.',
-          { fallback: true },
-        ),
-      )
-      return
-    }
-    const pending = getTrip().pendingChat
-    const patch = { ...pending?.patch, ...parsed.patch }
-    const candidate = patchConditions(getTrip().conditions, patch)
-    let clarification = parsed.kind === 'clarify' ? parsed.message : validateConditions(candidate)
-    if (pending?.need && !Object.hasOwn(parsed.patch || {}, pending.need))
-      clarification =
-        pending.need === 'headcount'
-          ? '정확한 인원을 알려주세요. 예: 6명'
-          : pending.need === 'departure'
-            ? '출발지를 한 곳으로 알려주세요. 예: 서울역'
-            : '목적 한두 가지를 다시 알려주세요. 예: 카페, 산책'
-    if (clarification) {
       updateTrip((t) => {
-        t.pendingChat = {
-          patch,
-          need:
-            parsed.need ||
-            (!candidate.departure
-              ? 'departure'
-              : !candidate.purposes.length
-                ? 'purposes'
-                : pending?.need),
-        }
-        message(t, clarification!, { fallback: true })
+        t.pendingChat = null
       })
-      return
+      await search(candidate, true)
+    } catch {
+      if (id !== request.current || getTrip().trip !== tripId) return
+      patchUI({
+        busy: false,
+        progress: null,
+        chatFailure: { tripId, text: text.trim() },
+      })
     }
-    updateTrip((t) => {
-      t.pendingChat = null
-    })
-    await search(candidate, true)
   }
+
   function toggleLayer(key: keyof Layers) {
     updateTrip((t) => {
       const current =
@@ -633,6 +659,7 @@ export function useDemoController() {
       savedAt: new Date().toISOString(),
       result: structuredClone(displayed),
       selectedId: trip.selected,
+      parkingSelections: structuredClone(trip.parkingSelections || {}),
       general: trip.general?.id === displayed.id,
       layers: structuredClone(trip.workspaceView?.layers || defaultLayers),
     }
@@ -677,6 +704,7 @@ export function useDemoController() {
         draft.trips.unshift(trip)
       }
       const restored = structuredClone(saved.result)
+      trip.parkingSelections = structuredClone(saved.parkingSelections || {})
       trip.conditions = structuredClone(restored.conditions)
       trip.onboardingDraft = structuredClone(restored.conditions)
       trip.onboardingComplete = true
@@ -750,6 +778,10 @@ export function useDemoController() {
     openDetail,
     retryRoute,
     submitChat,
+    retryChat: () => {
+      const failure = ui.chatFailure
+      if (failure?.tripId === getTrip().trip) return submitChat(failure.text, true)
+    },
     toggleLayer,
     saveMap,
     exclude,
@@ -761,6 +793,13 @@ export function useDemoController() {
       }),
     showChat,
     retrySearch: () => retry.current && search(retry.current.conditions, retry.current.fromChat),
+    selectParking: (placeId: string, parkingId: string) => {
+      if (!getResult()?.entries.some((entry) => entry.id === placeId)) return
+      updateTrip((t) => {
+        t.parkingSelections = { ...t.parkingSelections, [placeId]: parkingId }
+      })
+      notify('이 장소에서 이용할 주차장을 선택했어요.')
+    },
     selectPlace: (id: string) =>
       updateTrip((t) => {
         t.selected = id

@@ -1,3 +1,4 @@
+import markerIcons from '../data/icons.json'
 import { loadSeoulMapData } from '../data/seoulMapData'
 import { useParkingData } from '../parking/useParkingData'
 import { resolveParkingPopup } from '../parking/popup'
@@ -320,18 +321,29 @@ export default function GeoMap({
         onRecord({ kind: 'origin', data: { name: departure! } }, [origin.lat, origin.lon]),
       )
     }
-    for (const [index, entry] of (mapResult?.entries || []).entries()) {
+    for (const entry of mapResult?.entries || []) {
       const place = placeById(entry.id)
       if (!place) continue
       coordinates.push([place.lat, place.lon])
       const number = document.createElement('span')
-      number.textContent = String(index + 1)
+      number.className = 'destination-symbol'
+      const categoryIcons: Record<string, keyof typeof markerIcons> = {
+        카페: 'coffee',
+        식사: 'food',
+        산책: 'walk',
+        전시: 'art',
+      }
+      const symbol = markerIcons[categoryIcons[place.category] || 'pin']
+      number.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        symbol +
+        '</svg>'
       const marker = L.marker([place.lat, place.lon], {
         icon: L.divIcon({
           className: 'destination-marker',
           html: number,
-          iconSize: [38, 38],
-          iconAnchor: [19, 19],
+          iconSize: [40, 52],
+          iconAnchor: [20, 52],
         }),
         title: `${place.name} · 가상 예시`,
         zIndexOffset: 1000,
@@ -340,14 +352,10 @@ export default function GeoMap({
       }).addTo(group)
       const label = document.createElement('span')
       label.textContent = place.name
-      const nearOrigin =
-        origin &&
-        inside(origin) &&
-        instance.distance([place.lat, place.lon], [origin.lat, origin.lon]) < 450
       marker.bindTooltip(label, {
         permanent: true,
-        direction: nearOrigin ? 'top' : 'bottom',
-        offset: [0, nearOrigin ? -18 : 18],
+        direction: 'top',
+        offset: [0, -54],
         className: 'destination-label',
       })
       const element: HTMLElement | undefined = marker.getElement()

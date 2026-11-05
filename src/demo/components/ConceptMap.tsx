@@ -179,7 +179,7 @@ export default function ConceptMap() {
           <path d={rail} stroke="white" strokeWidth="6" />
           <path d={rail} stroke="#86a676" strokeWidth="2.5" />
         </g>
-        <g fontFamily="sans-serif" textAnchor="middle">
+        <g fontFamily="var(--app-font)" textAnchor="middle">
           {districts.map(([x, y, text]) => (
             <text
               key={text}
@@ -238,7 +238,7 @@ export default function ConceptMap() {
             </Fragment>
           ))}
         </g>
-        <g className="concept-population" fontFamily="sans-serif" textAnchor="middle">
+        <g className="concept-population" fontFamily="var(--app-font)" textAnchor="middle">
           {population.map((p, index) => (
             <Fragment key={p.name}>
               <circle cx={p.x} cy={p.y} r="65" fill={p.color} opacity=".12" />
@@ -275,7 +275,7 @@ export default function ConceptMap() {
             </Fragment>
           ))}
         </g>
-        <g className="concept-parking" fontFamily="sans-serif">
+        <g className="concept-parking" fontFamily="var(--app-font)">
           {parking.map((p, index) => (
             <g
               key={p.id}

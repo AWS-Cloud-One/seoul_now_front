@@ -80,7 +80,7 @@ it('첫 화면의 문구·DOM 구조·아이콘을 원본 HTML과 동일하게 �
   )
 })
 
-it('지도 미리보기의 모든 SVG 좌표·색상·문구·버튼 구조를 원본과 동일하게 렌더링한다', () => {
+it('글꼴 통일 외 지도 미리보기의 SVG 좌표·색상·문구·버튼 구조를 유지한다', () => {
   const locations = originalScript.slice(
     originalScript.indexOf('const CONCEPT_LOCATIONS='),
     originalScript.indexOf('function conceptMapHTML'),
@@ -94,6 +94,9 @@ it('지도 미리보기의 모든 SVG 좌표·색상·문구·버튼 구조를 �
     `const ui={layers:{roads:true,parking:true,population:true}};${locations}${concept};return conceptMapHTML();`,
   )() as string
   const expected = parse(reference).querySelector('svg')!
+  expected.querySelectorAll('[font-family]').forEach((element) => {
+    element.setAttribute('font-family', 'var(--app-font)')
+  })
   const actual = render(
     <DemoProvider>
       <ConceptMap />
@@ -117,7 +120,7 @@ it('공통 아이콘의 CSS 클래스·선 두께·SVG 도형을 원본과 동�
   }
 })
 
-it('21개 스타일시트의 내용과 적용 순서 및 폰트 데이터를 원본대로 유지한다', () => {
+it('글꼴 통일 외 21개 원본 스타일과 적용 순서를 유지하고 SUIT 파일을 검증한다', () => {
   const styles = [...original.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map(
     (match) => match[1],
   )
@@ -141,6 +144,13 @@ it('21개 스타일시트의 내용과 적용 순서 및 폰트 데이터를 원
     if (i === 18) expected = expected.replace('body > :is', 'body #root > :is')
     if (i === 20)
       expected = expected.replace('body.landing-active>:not', 'body.landing-active #root>:not')
+    // Typography is intentionally shared across all screens; preserve the other reference styles.
+    expected = expected
+      .replace(/@font-face\s*{[^}]*}/g, '')
+      .replace(/font-family\s*:[^;}]+/g, 'font-family: var(--app-font)')
+      .replace("bold 18px 'Lucida Console', Monaco, monospace", 'bold 18px var(--app-font)')
+      .replace('16px/24px Tahoma, Verdana, sans-serif', '16px/24px var(--app-font)')
+      .replace(/'SUIT Variable',\s*sans-serif/g, 'var(--app-font)')
     const filename = `${String(i + 1).padStart(2, '0')}.css`
     expect(hash(readFileSync(resolve('src/demo/styles', filename), 'utf8')), filename).toBe(
       hash(expected),

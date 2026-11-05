@@ -1,3 +1,5 @@
+import { estimatedWalkMinutes } from '../../parking/walking'
+import { compareParkingRows, hourlyBaseRate, type ParkingSort } from '../../parking/sort'
 import { useEffect, useRef, useState } from 'react'
 import { conditionText, dateLabel, placeById } from '../../domain.js'
 import { useDemo } from '../../useDemo'
@@ -23,7 +25,8 @@ type Base = { lat: number; lng: number; label: string }
 const SEOUL: [number, number] = [37.5665, 126.978]
 
 export function ParkingPanel({ go }: { go: (route: Route) => void }) {
-  const { active, result, layers, toggleLayer, workspaceCenter } = useParkingContext()
+  const { active, result, layers, toggleLayer, workspaceCenter, selectParking, openDetail } =
+    useParkingContext()
   const data = useParkingData('map')
   const selected = result ? placeById(active.selected) : undefined
   const center = workspaceCenter || SEOUL
@@ -33,9 +36,11 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
       : { lat: center[0], lng: center[1], label: '지도 중심' },
   )
   const [radius, setRadius] = useState(1000)
-  const [sort, setSort] = useState<'distance' | 'available'>('distance')
+  const [sort, setSort] = useState<ParkingSort>('distance')
   const [query, setQuery] = useState('')
-  const [picked, setPicked] = useState<string | null>(null)
+  const [picked, setPicked] = useState<string | null>(() =>
+    selected ? active.parkingSelections?.[selected.id] || null : null,
+  )
   const list = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!layers.parking) toggleLayer('parking')
@@ -63,11 +68,7 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
       meters: Math.round(distanceMeters([base.lat, base.lng], [lot.lat, lot.lng])),
     }))
     .filter((row) => row.meters <= radius && (!query || row.lot.name.includes(query)))
-    .sort((a, b) =>
-      sort === 'distance'
-        ? a.meters - b.meters
-        : (b.lot.available ?? -1) - (a.lot.available ?? -1) || a.meters - b.meters,
-    )
+    .sort((a, b) => compareParkingRows(a, b, sort))
   return (
     <>
       <PanelHeader
@@ -99,20 +100,28 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
             이 지도 위치에서 재검색
           </FilterChip>
         </div>
-        <div className="sn-chips" role="group" aria-label="검색 반경">
+        <div className="sn-chips" role="group" aria-label="검색 반경 및 정렬">
           {[500, 1000, 2000].map((r) => (
             <FilterChip key={r} pressed={radius === r} onClick={() => setRadius(r)}>
               {r >= 1000 ? `${r / 1000}km` : `${r}m`}
             </FilterChip>
           ))}
           <span className="sn-spacer" />
-          <FilterChip pressed={sort === 'distance'} onClick={() => setSort('distance')}>
-            가까운 순
-          </FilterChip>
-          <FilterChip pressed={sort === 'available'} onClick={() => setSort('available')}>
-            빈자리 순
-          </FilterChip>
+          <label className="sn-parking-sort">
+            <span className="sr-only">주차장 정렬</span>
+            <select value={sort} onChange={(event) => setSort(event.target.value as ParkingSort)}>
+              <option value="distance">가까운 순</option>
+              <option value="available">빈자리 순</option>
+              <option value="price">저렴한 순</option>
+            </select>
+          </label>
         </div>
+        {sort === 'price' && (
+          <p className="sn-note sn-parking-price-note">
+            기본요금을 1시간으로 환산한 순서예요. 추가요금·할인은 반영되지 않으며, 요금 미확인은
+            뒤에 표시해요.
+          </p>
+        )}
         <SearchField
           value={query}
           onChange={setQuery}
@@ -137,7 +146,10 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
               items={rows}
               keep={rows.findIndex((row) => row.lot.id === picked)}
               render={({ lot, meters }) => (
-                <li key={lot.id}>
+                <li
+                  key={lot.id}
+                  className={`sn-parking-item ${picked === lot.id ? 'is-picked' : ''}`}
+                >
                   <button
                     type="button"
                     className={`sn-parking-card ${picked === lot.id ? 'is-selected' : ''}`}
@@ -157,6 +169,9 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
                         {meters >= 1000 ? `${(meters / 1000).toFixed(1)}km` : `${meters}m`}
                       </span>
                       <span className="sn-place-facts">
+                        {selected && active.parkingSelections?.[selected.id] === lot.id && (
+                          <StatusBadge tone="info">선택한 주차장</StatusBadge>
+                        )}
                         {lot.available === null ? (
                           <StatusBadge>잔여 정보 없음</StatusBadge>
                         ) : lot.available === 0 ? (
@@ -170,11 +185,39 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
                         {lot.source === 'mock' && <StatusBadge>예시 데이터</StatusBadge>}
                       </span>
                       <span className="sn-place-meta">{parkingOperatingText(lot)}</span>
+                      {sort === 'price' && hourlyBaseRate(lot) !== null && (
+                        <span className="sn-place-meta sn-parking-price">
+                          기본요금 환산 약{' '}
+                          {Math.round(hourlyBaseRate(lot)!).toLocaleString('ko-KR')}원/시간
+                        </span>
+                      )}
                       {lot.collectedAt && (
                         <span className="sn-place-meta">갱신 {dateLabel(lot.collectedAt)}</span>
                       )}
                     </span>
                   </button>
+                  {picked === lot.id && selected && (
+                    <div className="sn-parking-confirm">
+                      <p>
+                        {selected.name}까지 도보 약{' '}
+                        {estimatedWalkMinutes(
+                          distanceMeters([selected.lat, selected.lon], [lot.lat, lot.lng]),
+                        )}
+                        분 <span>· 추정</span>
+                      </p>
+                      <small>직선거리 기반 추정이며 실제 도보 경로와 다를 수 있어요.</small>
+                      <SecondaryButton
+                        onClick={() => {
+                          selectParking(selected.id, lot.id)
+                          // Navigate to the detail route atomically so the hash listener keeps it open.
+                          window.location.hash = '/recommend/detail'
+                          openDetail(selected.id)
+                        }}
+                      >
+                        이 주차장 선택
+                      </SecondaryButton>
+                    </div>
+                  )}
                 </li>
               )}
             />

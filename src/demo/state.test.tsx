@@ -191,7 +191,11 @@ describe('React 화면 흐름', () => {
       .replace(/^\d+번 /, '')
       .replace(/ 선택$/, '')
     await user.click(cards[0])
-    expect(screen.getByRole('region', { name: '선택한 장소 요약' })).toHaveTextContent(name)
+    expect(screen.getByRole('region', { name: '선택한 장소 추가 정보' })).toHaveTextContent('주차')
+    expect(screen.getByRole('button', { name: `1번 ${name} 선택` })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
     await user.click(screen.getByRole('button', { name: name + ' 상세 보기' }))
     expect(screen.getByRole('heading', { name })).toBeInTheDocument()
     await user.click(screen.getByText('출처와 상세 정보'))
@@ -201,6 +205,110 @@ describe('React 화면 흐름', () => {
     expect(await screen.findByText(new RegExp(name + ' 주변'))).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /추천 결과로 돌아가기/ }))
     expect(await screen.findAllByRole('button', { name: /선택$/ })).toHaveLength(3)
-    expect(screen.getByRole('region', { name: '선택한 장소 요약' })).toHaveTextContent(name)
+    expect(screen.getByRole('region', { name: '선택한 장소 추가 정보' })).toHaveTextContent('주차')
+    expect(screen.getByRole('button', { name: `1번 ${name} 선택` })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
   }, 15000)
+})
+
+describe('채팅 요청 실패 복구', () => {
+  it('실패 후 대기를 해제하고 원문을 중복 기록하지 않고 재전송한다', async () => {
+    const { result } = controller()
+    await act(async () => {
+      await result.current.startTrip(conditions)
+    })
+    const interpret = vi
+      .spyOn(MockService, 'interpret')
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ kind: 'unsupported' })
+    await act(async () => {
+      await result.current.submitChat('조용한 곳으로')
+    })
+    expect(result.current.ui.busy).toBe(false)
+    expect(result.current.ui.progress).toBeNull()
+    expect(result.current.ui.chatFailure?.text).toBe('조용한 곳으로')
+    await act(async () => {
+      await result.current.retryChat()
+    })
+    expect(interpret).toHaveBeenNthCalledWith(2, '조용한 곳으로')
+    expect(result.current.ui.chatFailure).toBeNull()
+    expect(
+      result.current.active.chat.filter((m) => m.role === 'user' && m.text === '조용한 곳으로'),
+    ).toHaveLength(1)
+  })
+
+  it('교통 답변 요청이 실패해도 재전송할 수 있다', async () => {
+    const { result } = controller()
+    await act(async () => {
+      await result.current.startTrip(conditions)
+    })
+    vi.spyOn(MockService, 'interpret').mockResolvedValue({ kind: 'question', question: 'traffic' })
+    vi.spyOn(MockService, 'traffic').mockRejectedValue(new Error('offline'))
+    await act(async () => {
+      await result.current.submitChat('지금 얼마나 걸려?')
+    })
+    expect(result.current.ui.busy).toBe(false)
+    expect(result.current.ui.chatFailure?.text).toBe('지금 얼마나 걸려?')
+  })
+
+  it('여행 전환 후 도착한 이전 요청 실패를 새 여행에 표시하지 않는다', async () => {
+    const { result } = controller()
+    await act(async () => {
+      await result.current.startTrip(conditions)
+    })
+    let rejectRequest!: (error: Error) => void
+    vi.spyOn(MockService, 'interpret').mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          rejectRequest = reject
+        }),
+    )
+    let pending!: Promise<void>
+    act(() => {
+      pending = result.current.submitChat('다른 곳 찾아줘')
+    })
+    act(() => result.current.newTrip())
+    await act(async () => {
+      rejectRequest(new Error('offline'))
+      await pending
+    })
+    expect(result.current.ui.chatFailure).toBeNull()
+    expect(result.current.ui.busy).toBe(false)
+  })
+
+  it('30초 응답이 없으면 대기를 해제하고 늦은 답변을 무시한다', async () => {
+    const { result } = controller()
+    await act(async () => {
+      await result.current.startTrip(conditions)
+    })
+    let resolveRequest!: (value: { kind: string }) => void
+    vi.spyOn(MockService, 'interpret').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve
+        }),
+    )
+    vi.useFakeTimers()
+    try {
+      let pending!: Promise<void>
+      act(() => {
+        pending = result.current.submitChat('응답 지연')
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30000)
+        await pending
+      })
+      expect(result.current.ui.busy).toBe(false)
+      expect(result.current.ui.chatFailure?.text).toBe('응답 지연')
+      const count = result.current.active.chat.length
+      await act(async () => {
+        resolveRequest({ kind: 'unsupported' })
+      })
+      expect(result.current.active.chat).toHaveLength(count)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

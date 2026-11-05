@@ -76,10 +76,11 @@ it('저장 공간 오류가 나면 성공으로 표시하지 않고 기존 저�
   await act(async () => {
     await result.current.search(conditions)
   })
-  const native = localStorage.setItem
-  vi.spyOn(localStorage, 'setItem').mockImplementation(function (key, value) {
-    if (key === SAVED_TRIPS_KEY) throw new DOMException('Quota exceeded', 'QuotaExceededError')
-    return native.call(localStorage, key, value)
+  const native = Storage.prototype.setItem
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+    if (this === localStorage && key === SAVED_TRIPS_KEY)
+      throw new DOMException('Quota exceeded', 'QuotaExceededError')
+    return native.call(this, key, value)
   })
   act(() => result.current.saveCurrentTrip())
   expect(result.current.savedTrips).toHaveLength(1)

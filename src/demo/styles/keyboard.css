@@ -1,0 +1,142 @@
+/* Keep the map and sheet size stable; follow native viewport frames with the sheet's bottom edge. */
+@media (max-width: 900px) {
+  .sn-app {
+    height: var(--sn-layout-height, 100dvh);
+  }
+  .sn-app[data-keyboard='true'] {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .sn-app .sn-rail,
+  .sn-app[data-keyboard='true'] .sn-rail {
+    display: flex;
+    transition: opacity 120ms ease;
+  }
+  .sn-app[data-keyboard='true'] .sn-rail {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .sn-app {
+    --sn-rest-sheet-height: calc(var(--sn-layout-height, 100dvh) * 0.46);
+  }
+  .sn-app[data-route='recommend'][data-has-results='true'] {
+    --sn-rest-sheet-height: calc(var(--sn-layout-height, 100dvh) * 0.64);
+  }
+  .sn-app[data-route][data-sheet='full'] {
+    --sn-rest-sheet-height: calc(
+      var(--sn-layout-height, 100dvh) - 120px - env(safe-area-inset-bottom)
+    );
+  }
+  .sn-app[data-route][data-sheet='peek'] {
+    --sn-rest-sheet-height: 56px;
+  }
+  .sn-app[data-route][data-sheet][data-open] .sn-panel {
+    top: auto;
+    bottom: max(
+      calc(64px + env(safe-area-inset-bottom)),
+      calc(
+        var(--sn-layout-height, 100dvh) - var(--sn-visible-height, 100dvh) -
+          var(--sn-visible-top, 0px)
+      )
+    );
+    height: min(var(--sn-rest-sheet-height), calc(var(--sn-visible-height, 100dvh) - 12px));
+    transition: none;
+  }
+  .sn-app[data-keyboard='true'] .sn-chat-foot {
+    padding-bottom: 8px;
+  }
+}
+@media (max-width: 900px) and (max-height: 650px) {
+  .sn-app[data-route='recommend'][data-has-results='true']:not([data-sheet='peek']) {
+    --sn-rest-sheet-height: calc(
+      var(--sn-layout-height, 100dvh) - 120px - env(safe-area-inset-bottom)
+    );
+  }
+}
+@media (max-width: 900px) and (max-height: 500px) {
+  .sn-app:not([data-sheet='peek']) {
+    --sn-rest-sheet-height: calc(
+      var(--sn-layout-height, 100dvh) - 76px - env(safe-area-inset-bottom)
+    );
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sn-app .sn-rail {
+    transition: none;
+  }
+}
+
+/* Enter chat editing before the native keyboard starts. Never reveal the map between frames. */
+@media (max-width: 900px) {
+  .sn-app[data-route='chat'][data-chat-editing='true']:not([data-chat-map='true']) {
+    background: var(--sn-surface);
+  }
+  .sn-app[data-route='chat'][data-chat-editing='true']:not([data-chat-map='true']) .sn-map,
+  .sn-app[data-route='chat'][data-chat-editing='true']:not([data-chat-map='true']) .sn-rail {
+    visibility: hidden;
+  }
+  .sn-app[data-route='chat'][data-chat-editing='true']:not(
+      [data-chat-map='true']
+    )[data-sheet][data-open]
+    .sn-panel {
+    top: var(--sn-visible-top, 0px);
+    bottom: auto;
+    height: var(--sn-visible-height, 100dvh);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+.sn-chat-map-button,
+.sn-chat-return {
+  display: none;
+}
+@media (max-width: 900px) {
+  .sn-app[data-route='chat'][data-sheet]:not([data-chat-map='true']) {
+    --sn-rest-sheet-height: min(
+      calc(var(--sn-layout-height, 100dvh) * 0.8),
+      calc(var(--sn-layout-height, 100dvh) - 120px - env(safe-area-inset-bottom))
+    );
+  }
+  .sn-chat-map-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 40px;
+    padding: 0 10px;
+    border: 1px solid var(--sn-line);
+    border-radius: 10px;
+    background: var(--sn-surface);
+    color: var(--sn-brand-ink);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .sn-chat-map-button .icon {
+    width: 16px;
+    height: 16px;
+  }
+  .sn-app[data-chat-map='true'] .sn-panel-inner {
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .sn-app[data-chat-map='true'] .sn-sheet-handle,
+  .sn-app[data-chat-map='true'] .sn-sheet-peek {
+    display: none;
+  }
+  .sn-chat-return {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    background: var(--sn-surface);
+    color: var(--sn-brand-ink);
+    font-size: 14px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+}

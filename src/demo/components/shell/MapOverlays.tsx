@@ -1,3 +1,4 @@
+import { useSelectedParking } from '../../parking/useSelectedParking'
 import { useEffect, useRef, useState } from 'react'
 import { DEPARTURES, dateLabel, placeById } from '../../domain.js'
 import { useDemo } from '../../useDemo'
@@ -173,6 +174,7 @@ export function SelectionSummary({
 }) {
   const { wide } = useLayout()
   const { active, result, ui, selectPlace } = useDemo()
+  const parking = useSelectedParking(active.selected)
   const place = placeById(active.selected)
   const entry = result?.entries.find((e) => e.id === active.selected)
   if (!place || !entry || !result || ui.detail) return null
@@ -180,7 +182,6 @@ export function SelectionSummary({
   if (variant === 'map' ? wide : !wide) return null
   const number = result.entries.indexOf(entry) + 1
   const origin = active.conditions.departure ? DEPARTURES[active.conditions.departure] : undefined
-  const unknown = entry.parkingUnknown || !place.parking?.length
   return (
     <section
       className={variant === 'map' ? 'sn-glass sn-summary-card' : 'sn-selected-inline'}
@@ -197,9 +198,9 @@ export function SelectionSummary({
         </span>
         <span>
           <StatusBadge>
-            {unknown
-              ? '주차 정보 없음'
-              : `주차장→목적지 도보 약 ${Math.max(1, Math.round((Math.min(...place.parking!.map((p) => p.distance)) * 1.3) / 67))}분(추정)`}
+            {parking
+              ? `${parking.lot.name} · 도보 약 ${parking.minutes}분(추정)`
+              : '주차장 선택 필요'}
           </StatusBadge>
           <small>추천 계산 {dateLabel(entry.queryTime)}</small>
         </span>

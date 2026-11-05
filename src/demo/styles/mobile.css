@@ -1,0 +1,170 @@
+/* Detail bodies must scroll within the panel, including on short screens. */
+.sn-detail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.sn-bubble {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .sn-app {
+    top: 0;
+    bottom: auto;
+    height: 100dvh;
+  }
+  .sn-panel,
+  .sn-app[data-open='false'] .sn-panel {
+    position: absolute;
+    transition: none;
+    height: min(46dvh, calc(100% - 120px - env(safe-area-inset-bottom)));
+  }
+  .sn-app[data-sheet='full'] .sn-panel {
+    height: calc(100% - 120px - env(safe-area-inset-bottom));
+  }
+  .sn-legend-mini {
+    top: 10px;
+    left: 10px;
+    bottom: auto;
+  }
+  .sn-legend-panel {
+    grid-row: 2;
+    width: min(248px, calc(100vw - 72px));
+    min-width: 0;
+    max-height: min(300px, 35dvh);
+    overflow-y: auto;
+  }
+  .sn-chat-foot {
+    padding: 8px 12px;
+  }
+  /* Keep all editable fields large enough to avoid focus zoom on phones. */
+  body :is(input:not([type='checkbox']):not([type='radio']), select, textarea),
+  .sn-app :is(.sn-search input, .sn-form input, .sn-form select, .sn-ai-form input) {
+    font-size: 16px;
+  }
+  .sn-ai-form input {
+    min-width: 0;
+    font-size: 16px;
+  }
+  .sn-app[data-keyboard='true'] {
+    grid-template-rows: 1fr;
+  }
+  .sn-app[data-keyboard='true'] .sn-rail {
+    display: none;
+  }
+  .sn-app[data-keyboard='true'] .sn-panel {
+    top: var(--sn-visible-top, 0px);
+    bottom: auto;
+    height: var(--sn-visible-height, 100dvh);
+  }
+  .sn-app[data-keyboard='true'] .sn-ai-samples {
+    display: none;
+  }
+  .sn-app[data-keyboard='true'] .sn-chat-foot {
+    padding-bottom: 8px;
+  }
+}
+
+/* Short landscape screens need the content area, rather than a half-height sheet. */
+@media (max-width: 900px) and (max-height: 500px) {
+  .sn-app:not([data-sheet='peek']) .sn-panel {
+    height: calc(100% - 76px - env(safe-area-inset-bottom));
+  }
+  .sn-ai-samples {
+    display: none;
+  }
+  .sn-panel-header {
+    padding-top: 4px;
+    padding-bottom: 6px;
+  }
+  .sn-panel-header h2 {
+    font-size: 18px;
+  }
+  .sn-app[data-keyboard='true'] .sn-panel {
+    height: var(--sn-visible-height, 100dvh);
+  }
+}
+
+/* Examples stay available on desktop and expand on demand on phones. */
+.sn-samples-toggle {
+  display: none;
+}
+@media (max-width: 900px) {
+  .sn-app .sn-samples-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-self: start;
+    min-height: 36px;
+    padding: 0 6px;
+    border: 0;
+    background: transparent;
+    color: var(--sn-text-2);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .sn-samples-toggle .icon {
+    width: 15px;
+    height: 15px;
+  }
+  .sn-app .sn-ai-samples[data-expanded='false'] {
+    display: none;
+  }
+  .sn-app .sn-ai-samples[data-expanded='true'],
+  .sn-app[data-keyboard='true'] .sn-ai-samples[data-expanded='true'] {
+    display: flex;
+    max-height: 112px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+.sn-chat-conditions-mobile {
+  display: none;
+}
+@media (max-width: 900px) {
+  .sn-chat-conditions-desktop {
+    display: none;
+  }
+  .sn-chat-conditions-mobile {
+    display: block;
+    font-size: 12px;
+  }
+  .sn-chat-conditions-mobile summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 32px;
+    padding: 0 2px;
+    color: var(--sn-text-2);
+    list-style: none;
+    cursor: pointer;
+  }
+  .sn-chat-conditions-mobile summary::-webkit-details-marker {
+    display: none;
+  }
+  .sn-chat-conditions-mobile summary .icon {
+    width: 13px;
+    height: 13px;
+  }
+  .sn-chat-conditions-mobile[open] summary .icon:last-child {
+    transform: rotate(180deg);
+  }
+  .sn-chat-conditions-body {
+    margin-top: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--sn-line);
+    border-radius: 10px;
+    background: var(--sn-bg);
+    color: var(--sn-text-2);
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+    max-height: 22dvh;
+    overflow-y: auto;
+  }
+  .sn-chat-conditions-body p + p {
+    margin-top: 4px;
+  }
+}

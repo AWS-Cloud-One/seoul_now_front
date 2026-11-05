@@ -9,6 +9,8 @@ import ChatPanel from './ChatPanel'
 import DirectionsPanel from './DirectionsPanel'
 import RecommendPanel from './RecommendPanel'
 import { useRoute } from './useRoute'
+import { useVisualViewport } from './useVisualViewport'
+import type { CSSProperties } from 'react'
 import type { Route } from './useRoute'
 
 const GeoMap = lazy(() => import('../GeoMap'))
@@ -53,12 +55,16 @@ export default function AppShell() {
   if (computed.wide !== layout.wide || computed.legendOpen !== layout.legendOpen)
     setLayout(computed)
   const [sheet, setSheet] = useState<Sheet>('half')
+  const [chatMap, setChatMap] = useState(false)
+  const displayedSheet = route === 'chat' && chatMap ? 'peek' : sheet
+  const visibleViewport = useVisualViewport()
   const hasResult = !!result
   useEffect(() => {
     document.title = `${NAV.find((n) => n.route === route)!.label} · 서울, 지금 어디?`
   }, [route])
   const select = (next: Route) => {
     go(next)
+    if (next === 'chat') setChatMap(false)
     setOpen(true)
     if (sheet === 'peek') setSheet('half')
   }
@@ -80,7 +86,7 @@ export default function AppShell() {
     ) : route === 'recommend' ? (
       <RecommendPanel go={select} />
     ) : route === 'chat' ? (
-      <ChatPanel go={select} />
+      <ChatPanel go={select} onShowMap={() => setChatMap(true)} />
     ) : route === 'directions' ? (
       <DirectionsPanel go={select} />
     ) : route === 'parking' ? (
@@ -93,8 +99,20 @@ export default function AppShell() {
       <div
         className="sn-app"
         data-open={open}
-        data-sheet={sheet}
-        style={{ '--sn-panel': `${width}px` } as React.CSSProperties}
+        data-sheet={displayedSheet}
+        data-chat-map={route === 'chat' && chatMap}
+        data-route={route}
+        data-has-results={hasResult}
+        data-keyboard={visibleViewport.keyboard}
+        data-chat-editing={visibleViewport.chatActive}
+        style={
+          {
+            '--sn-panel': `${width}px`,
+            '--sn-layout-height': `${visibleViewport.layoutHeight}px`,
+            '--sn-visible-height': `${visibleViewport.height}px`,
+            '--sn-visible-top': `${visibleViewport.top}px`,
+          } as CSSProperties
+        }
       >
         <a className="skip" href="#sn-panel">
           본문으로 건너뛰기
@@ -125,11 +143,25 @@ export default function AppShell() {
           ))}
         </nav>
         <aside className="sn-panel" id="sn-panel" aria-label="탐색 패널" tabIndex={-1}>
+          {route === 'chat' && chatMap && (
+            <button
+              type="button"
+              className="sn-chat-return"
+              onClick={() => setChatMap(false)}
+              aria-controls="sn-panel-content"
+            >
+              <Icon name="chat" /> 대화로 돌아가기 <Icon name="chevronUp" />
+            </button>
+          )}
           <button
             type="button"
             className="sn-sheet-handle"
             aria-label={sheet === 'full' ? '패널 낮추기' : '패널 높이기'}
-            onClick={() => setSheet(sheet === 'full' ? 'half' : sheet === 'half' ? 'full' : 'half')}
+            onClick={() =>
+              route === 'chat'
+                ? setChatMap(true)
+                : setSheet(sheet === 'full' ? 'half' : sheet === 'half' ? 'full' : 'half')
+            }
           >
             <span />
           </button>
@@ -137,7 +169,9 @@ export default function AppShell() {
             type="button"
             className="sn-sheet-peek"
             aria-label="패널 접기"
-            onClick={() => setSheet(sheet === 'peek' ? 'half' : 'peek')}
+            onClick={() =>
+              route === 'chat' ? setChatMap(true) : setSheet(sheet === 'peek' ? 'half' : 'peek')
+            }
           >
             <Icon name={sheet === 'peek' ? 'chevronUp' : 'chevronDown'} />
           </button>
@@ -166,7 +200,7 @@ export default function AppShell() {
               if (event.key === 'ArrowRight') resize(width + 24)
             }}
           />
-          <div className="sn-panel-inner" key={route}>
+          <div className="sn-panel-inner" id="sn-panel-content" key={route}>
             {panel}
           </div>
         </aside>
@@ -237,7 +271,7 @@ export default function AppShell() {
             <LayerMenu />
           </div>
           <MapLegend />
-          {(route === 'recommend' || route === 'chat') && (
+          {route === 'chat' && (
             <SelectionSummary
               onDetail={() => active.selected && openDetail(active.selected)}
               onParking={() => select('parking')}

@@ -1,8 +1,13 @@
-import { useState } from 'react'
-import { conditionText, dateLabel, placeById, validateConditions } from '../../domain.js'
+import { useSelectedParking } from '../../parking/useSelectedParking'
+import {
+  conditionText,
+  dateLabel,
+  DEPARTURES,
+  placeById,
+  validateConditions,
+} from '../../domain.js'
 import { PanelTabs } from './ChatPanel'
-import { SelectionSummary } from './MapOverlays'
-import { focusMap } from './useRoute'
+import { fitMap, focusMap } from './useRoute'
 import { useDemo } from '../../useDemo'
 import type { Entry, Place } from '../../types'
 import ConditionsForm from '../ConditionsForm'
@@ -13,7 +18,6 @@ import {
   LoadingSkeleton,
   PanelHeader,
   PrimaryButton,
-  SearchField,
   SecondaryButton,
   StatusBadge,
 } from './ui'
@@ -28,15 +32,7 @@ const categoryIcon: Record<string, string> = {
 }
 const iconFor = (category: string) => categoryIcon[category] || 'pin'
 const etaText = (entry: Entry) =>
-  entry.eta === null ? '이동시간 확인 불가' : `목적지까지 자동차 ${entry.eta}분`
-/** Straight-line metres are not a walking time; scale by 1.3 for street detours at ~4km/h and say it is an estimate. */
-const walkMinutes = (meters: number) => Math.max(1, Math.round((meters * 1.3) / 67))
-/** Car time plus the walk from the nearest registered lot; both are estimates, so say so. */
-const doorToDoor = (entry: Entry, place: Place) =>
-  entry.eta === null || entry.parkingUnknown || !place.parking?.length
-    ? null
-    : entry.eta + walkMinutes(Math.min(...place.parking.map((p) => p.distance)))
-
+  entry.eta === null ? '이동시간 확인 불가' : `자동차 약 ${entry.eta}분`
 /** Tags help compare places, so drop ones that repeat the area or category already shown. */
 const usefulTags = (place: Place) =>
   (place.tags || []).filter((tag) => ![place.category, place.area, place.district].includes(tag))
@@ -46,13 +42,18 @@ function PlaceCard({
   entry,
   place,
   selected,
+  go,
 }: {
   index: number
   entry: Entry
   place: Place
   selected: boolean
+  go: (route: Route) => void
 }) {
-  const { selectPlace, openDetail, patchUI, ui } = useDemo()
+  const { selectPlace, openDetail, patchUI, ui, result } = useDemo()
+  const departure = result?.conditions.departure
+  const origin = departure ? DEPARTURES[departure] : undefined
+  const parking = useSelectedParking(place.id)
   return (
     <li>
       <div
@@ -64,36 +65,35 @@ function PlaceCard({
           type="button"
           className="sn-place-main"
           aria-pressed={selected}
+          aria-expanded={selected}
+          aria-controls={selected ? `place-extra-${entry.id}` : undefined}
           aria-label={`${index + 1}번 ${place.name} 선택`}
           onClick={() => {
             selectPlace(entry.id)
             focusMap(place.lat, place.lon, 16)
           }}
         >
-          <span className="sn-rank" aria-hidden="true">
-            {index + 1}
-          </span>
           <span className="sn-place-body">
-            <strong>{place.name}</strong>
+            <span className="sn-place-heading">
+              <span className="sn-rank" aria-hidden="true">
+                {index + 1}
+              </span>
+              <strong>{place.name}</strong>
+            </span>
             <span className="sn-place-meta">
               <Icon name={iconFor(place.category)} />
               {place.category} · {place.area}
             </span>
-            <span className="sn-place-reason">{entry.reason}</span>
+            <span className="sn-place-reason">{place.description || entry.reason}</span>
             <span className="sn-place-facts">
               <StatusBadge tone={entry.eta === null ? 'neutral' : 'info'}>
                 {etaText(entry)}
               </StatusBadge>
-              {doorToDoor(entry, place) !== null && (
-                <StatusBadge tone="neutral">
-                  주행·도보 합계 약 {doorToDoor(entry, place)}분(추정)
-                </StatusBadge>
-              )}
             </span>
             {usefulTags(place).length > 0 && (
               <span className="sn-place-tags">
                 {usefulTags(place)
-                  .slice(0, 3)
+                  .slice(0, 2)
                   .map((tag) => (
                     <span key={tag}>{tag}</span>
                   ))}
@@ -109,6 +109,41 @@ function PlaceCard({
         >
           <Icon name="chevronRight" />
         </button>
+        {selected && (
+          <section
+            className="sn-place-expanded"
+            id={`place-extra-${entry.id}`}
+            aria-label="선택한 장소 추가 정보"
+          >
+            <p className="sn-place-walk">
+              <Icon name="walk" />
+              {parking
+                ? `${parking.lot.name} · 도보 약 ${parking.minutes}분 · 추정`
+                : '주차장을 선택해 주세요'}
+            </p>
+            <div className="sn-place-expanded-actions">
+              <PrimaryButton className="is-compact" onClick={() => openDetail(entry.id)}>
+                상세 보기
+              </PrimaryButton>
+              {origin && (
+                <SecondaryButton
+                  className="is-compact"
+                  onClick={() =>
+                    fitMap([
+                      [origin.lat, origin.lon],
+                      [place.lat, place.lon],
+                    ])
+                  }
+                >
+                  경로 범위 보기
+                </SecondaryButton>
+              )}
+              <SecondaryButton className="is-compact" onClick={() => go('parking')}>
+                주변 주차장
+              </SecondaryButton>
+            </div>
+          </section>
+        )}
       </div>
     </li>
   )
@@ -117,11 +152,11 @@ function PlaceCard({
 function PlaceDetailView({ go }: { go: (route: Route) => void }) {
   const { active, result, ui, patchUI, exclude, saveCurrentTrip, currentTripSaved } = useDemo()
   const detail = ui.detail
+  const parking = useSelectedParking(detail?.id)
   const place = placeById(detail?.id)
   const entry = result?.entries.find((e) => e.id === detail?.id)
   if (!detail || !place || !entry || !result) return null
   const number = result.entries.findIndex((e) => e.id === entry.id) + 1
-  const unknown = entry.parkingUnknown || !place.parking?.length
   return (
     <div className="sn-detail">
       <PanelHeader
@@ -137,7 +172,7 @@ function PlaceDetailView({ go }: { go: (route: Route) => void }) {
         <div className="sn-action-row">
           <PrimaryButton onClick={() => go('parking')}>
             <Icon name="parking" />
-            주변 주차장
+            {parking ? '주차장 변경' : '주변 주차장'}
           </PrimaryButton>
           <SecondaryButton disabled={currentTripSaved} onClick={saveCurrentTrip}>
             <Icon name="bookmark" />
@@ -146,27 +181,39 @@ function PlaceDetailView({ go }: { go: (route: Route) => void }) {
         </div>
         <section className="sn-section" aria-labelledby="sn-d-now">
           <h3 id="sn-d-now">현재 상황</h3>
-          <dl className="sn-facts">
+          <dl className="sn-facts sn-current-facts">
             <div>
-              <dt>이동시간</dt>
-              <dd>{entry.eta === null ? '확인 불가' : `자동차 ${entry.eta}분`}</dd>
-              <small>목적지까지 · 모의 경로 · 도보 제외</small>
+              <dt>
+                <Icon name="car" />
+                자동차 이동
+              </dt>
+              <dd>{entry.eta === null ? '확인 불가' : `약 ${entry.eta}분`}</dd>
+              <small>목적지까지 · 예시 경로 · 도보 제외</small>
             </div>
             <div>
-              <dt>주차장에서 목적지까지</dt>
-              <dd>
-                {unknown
-                  ? '정보 없음'
-                  : `도보 약 ${walkMinutes(Math.min(...place.parking!.map((p) => p.distance)))}분(추정)`}
-              </dd>
-              <small>외부 이용·빈자리는 확인 안 됨</small>
+              <dt>
+                <Icon name="walk" />
+                주차 후 도보
+              </dt>
+              <dd>{parking ? `약 ${parking.minutes}분` : '선택 필요'}</dd>
+              <small>
+                {parking
+                  ? `${parking.lot.name} · 직선거리 기반 추정`
+                  : '주변 주차장에서 선택해 주세요'}
+              </small>
             </div>
             <div>
-              <dt>혼잡도</dt>
+              <dt>
+                <Icon name="people" />
+                혼잡도
+              </dt>
               <dd>정보 없음</dd>
-              <small>이 장소엔 연결된 관측 없음</small>
+              <small>연결된 관측 정보 없음</small>
             </div>
           </dl>
+          <p className="sn-current-note">
+            주차장 외부 이용 가능 여부와 빈자리는 확인되지 않았어요.
+          </p>
         </section>
         <RouteSection key={place.id} place={place} departure={result.conditions.departure} />
         <NearbyShopsSection key={`food-${place.id}`} place={place} />
@@ -204,19 +251,8 @@ function PlaceDetailView({ go }: { go: (route: Route) => void }) {
 }
 
 export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
-  const {
-    active,
-    result,
-    ui,
-    newTrip,
-    openEdit,
-    search,
-    retrySearch,
-    startTrip,
-    updateDraft,
-    openDetail,
-  } = useDemo()
-  const [query, setQuery] = useState('')
+  const { active, result, ui, newTrip, openEdit, search, retrySearch, startTrip, updateDraft } =
+    useDemo()
   if (!active.onboardingComplete) {
     const draft = active.onboardingDraft || active.conditions
     const invalid = validateConditions(draft)
@@ -243,7 +279,7 @@ export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
   const stale = result && active.retainedResult?.id === result.id && !ui.busy
   const entries = (result?.entries || []).filter((entry) => {
     const place = placeById(entry.id)
-    return place && (!query || `${place.name} ${place.category} ${place.area}`.includes(query))
+    return !!place
   })
   const conditions = result?.conditions || ui.progress?.conditions || active.conditions
   return (
@@ -261,11 +297,6 @@ export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
         subtitle={<span className="sn-summary">{conditionText(conditions)}</span>}
       />
       <div className="sn-scroll">
-        <SelectionSummary
-          variant="panel"
-          onDetail={() => active.selected && openDetail(active.selected)}
-          onParking={() => go('parking')}
-        />
         {ui.notice && (
           <ErrorState
             title={ui.notice.type === 'info' ? '안내' : '추천을 불러오지 못했어요'}
@@ -289,12 +320,6 @@ export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
         )}
         {result?.entries.length ? (
           <>
-            <SearchField
-              value={query}
-              onChange={setQuery}
-              label="추천 장소 검색"
-              placeholder="추천 결과에서 검색"
-            />
             {entries.length ? (
               <ol className="sn-list">
                 {entries.map((entry) => (
@@ -304,11 +329,14 @@ export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
                     entry={entry}
                     place={placeById(entry.id)!}
                     selected={active.selected === entry.id}
+                    go={go}
                   />
                 ))}
               </ol>
             ) : (
-              <EmptyState title="검색 결과가 없어요">다른 이름으로 찾아보세요.</EmptyState>
+              <EmptyState title="표시할 추천 장소가 없어요">
+                다른 장소를 추천받아 보세요.
+              </EmptyState>
             )}
           </>
         ) : ui.busy ? (
