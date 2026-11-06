@@ -188,6 +188,69 @@ export function createMapLayers(
     parkingLayer = L.layerGroup().addTo(map)
   const roadItems = new Map(),
     parkingItems = new Map()
+  const parkingMembers = new Map()
+  let highlightedParking = null
+  let focusedParkingMarker = null
+  let focusedParkingKey = ''
+  function highlightParking(id) {
+    highlightedParking = id
+    for (const [key, marker] of parkingItems) {
+      const individual = parkingMembers.get(key)?.size === 1 && parkingMembers.get(key)?.has(id)
+      const element = marker.getElement()
+      element?.classList.remove('is-selected')
+      element?.setAttribute('aria-pressed', 'false')
+      if (element) element.style.visibility = individual ? 'hidden' : ''
+      marker.setZIndexOffset(0)
+    }
+    const location =
+      layers.parking && id
+        ? PARKING_LOCATIONS.find((item) => item.records.some((record) => record.id === id))
+        : undefined
+    const record = location?.records.find((item) => item.id === id)
+    if (!location || !record) {
+      focusedParkingMarker?.remove()
+      focusedParkingMarker = null
+      focusedParkingKey = ''
+      return
+    }
+    const key = JSON.stringify([id, location.lat, location.lng, record.name, record.address])
+    if (key === focusedParkingKey && focusedParkingMarker) return
+    focusedParkingMarker?.remove()
+    focusedParkingKey = key
+    const label = record.name + (record.address ? ' · ' + record.address : ' · 주소 정보 없음')
+    focusedParkingMarker = L.marker([location.lat, location.lng], {
+      icon: L.divIcon({
+        className: 'sn-focused-parking',
+        html: PARKING_ICON,
+        iconSize: [40, 48],
+        iconAnchor: [20, 48],
+      }),
+      title: label,
+      zIndexOffset: 1500,
+      keyboard: true,
+    }).addTo(map)
+    focusedParkingMarker.getElement()?.setAttribute('aria-label', '살펴보는 주차장: ' + label)
+    focusedParkingMarker.getElement()?.setAttribute('aria-pressed', 'true')
+    focusedParkingMarker.bindTooltip(
+      '<strong>' +
+        esc(record.name) +
+        '</strong><span>' +
+        esc(record.address || '주소 정보 없음') +
+        '</span>',
+      {
+        permanent: true,
+        direction: 'top',
+        offset: [0, -48],
+        className: 'sn-focused-parking-label',
+      },
+    )
+    focusedParkingMarker.on('click', () => {
+      const current = PARKING_LOCATIONS.find((item) =>
+        item.records.some((item) => item.id === highlightedParking),
+      )
+      if (current) onRecord({ kind: 'parking', data: current }, [current.lat, current.lng])
+    })
+  }
   const zoomToParking = () => {
     const focus =
       neighborhood.places.find((place) => place.id === selected) || neighborhood.places[0]
@@ -356,11 +419,16 @@ export function createMapLayers(
           } else onRecord({ kind: 'parking', data: locations[0] }, [lat, lng])
         })
         parkingItems.set(key, marker)
+        parkingMembers.set(
+          key,
+          new Set(locations.flatMap((location) => location.records.map((record) => record.id))),
+        )
       }
     for (const [key, marker] of parkingItems)
       if (!present.has(key)) {
         parkingLayer.removeLayer(marker)
         parkingItems.delete(key)
+        parkingMembers.delete(key)
       }
   }
   function draw() {
@@ -371,6 +439,7 @@ export function createMapLayers(
     drawHeat()
     drawRoads(bounds, zoom)
     drawParking(bounds, zoom)
+    highlightParking(highlightedParking)
   }
   const schedule = () => {
     if (!frame && !destroyed) frame = requestAnimationFrame(draw)
@@ -384,12 +453,14 @@ export function createMapLayers(
   map.on('click', onAreaClick)
   draw()
   return {
+    highlightParking,
     updateParking(records) {
       PARKING_LOCATIONS = groupParking(records)
       neighborhood.parking = PARKING_LOCATIONS
       parkingCache.clear()
       parkingLayer.clearLayers()
       parkingItems.clear()
+      parkingMembers.clear()
       schedule()
     },
     update() {
@@ -398,6 +469,8 @@ export function createMapLayers(
     },
     destroy() {
       destroyed = true
+      focusedParkingMarker?.remove()
+      focusedParkingMarker = null
       if (frame) cancelAnimationFrame(frame)
       map.off('moveend zoomend resize', schedule)
       map.off('click', onAreaClick)
@@ -407,6 +480,7 @@ export function createMapLayers(
       map.removeLayer(roadRenderer)
       roadItems.clear()
       parkingItems.clear()
+      parkingMembers.clear()
       parkingCache.clear()
     },
   }

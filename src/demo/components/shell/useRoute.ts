@@ -45,6 +45,7 @@ export function distanceMeters(a: [number, number], b: [number, number]) {
 export const FOOD_SELECT_EVENT = 'sn:food-select'
 export const MAP_OVERLAY_EVENT = 'sn:map-overlay'
 export type MapOverlay = {
+  destination?: { name: string; lat: number; lng: number } | null
   /** [lat, lng] pairs of the driving route. */
   route: [number, number][] | null
   food: { id: string; name: string; lat: number; lng: number }[] | null

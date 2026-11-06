@@ -156,6 +156,9 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
                     aria-pressed={picked === lot.id}
                     onClick={() => {
                       setPicked(lot.id)
+                      window.dispatchEvent(
+                        new CustomEvent(PARKING_SELECT_EVENT, { detail: { id: lot.id } }),
+                      )
                       focusMap(lot.lat, lot.lng, 17)
                     }}
                   >
@@ -164,13 +167,21 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
                     </span>
                     <span className="sn-place-body">
                       <strong>{lot.name}</strong>
+                      <span className="sn-place-meta sn-parking-address">
+                        {lot.address || '주소 정보 없음'}
+                      </span>
                       <span className="sn-place-meta">
                         {base.label}에서 직선{' '}
                         {meters >= 1000 ? `${(meters / 1000).toFixed(1)}km` : `${meters}m`}
                       </span>
                       <span className="sn-place-facts">
                         {selected && active.parkingSelections?.[selected.id] === lot.id && (
-                          <StatusBadge tone="info">선택한 주차장</StatusBadge>
+                          <StatusBadge tone="info">
+                            <span className="sn-parking-confirmed">
+                              <Icon name="check" />
+                              선택한 주차장
+                            </span>
+                          </StatusBadge>
                         )}
                         {lot.available === null ? (
                           <StatusBadge>잔여 정보 없음</StatusBadge>
@@ -297,11 +308,12 @@ export function SavedPanel({ go }: { go: (route: Route) => void }) {
                 </button>
                 <button
                   type="button"
-                  className="sn-place-more"
-                  aria-label={`${saved.title} 삭제`}
+                  className="sn-saved-remove"
+                  aria-label={`${saved.title} 저장 취소`}
                   onClick={() => removeSavedTrip(saved.id)}
                 >
-                  <Icon name="close" />
+                  <Icon name="bookmarkRemove" />
+                  저장 취소
                 </button>
               </li>
             ))}

@@ -12,7 +12,7 @@ import { searchPlaces, type FoundPlace } from '../../routing/api'
 import Icon from '../Icon'
 import { NearbyShopsSection, RouteSection } from './RouteSections'
 import { EmptyState, PanelHeader, SearchField, SecondaryButton, StatusBadge } from './ui'
-import { focusMap } from './useRoute'
+import { focusMap, setMapOverlay } from './useRoute'
 import type { Route } from './useRoute'
 
 type Destination = {
@@ -105,6 +105,7 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
 
   const choose = (next: Destination) => {
     setDest(next)
+    setMapOverlay({ destination: { name: next.name, lat: next.lat, lng: next.lon } })
     focusMap(next.lat, next.lon, 15)
   }
   const searching = query.trim().length > 0
@@ -128,6 +129,7 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
                 className="is-compact"
                 onClick={() => {
                   setDest(null)
+                  setMapOverlay({ destination: null })
                   setQuery('')
                   setFound({ status: 'idle' })
                 }}

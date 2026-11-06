@@ -1,3 +1,4 @@
+import { SEOUL_BOUNDARY } from '../data/seoulBoundary'
 import { useSyncExternalStore } from 'react'
 
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
@@ -39,7 +40,7 @@ let state: LiveState = {
   status: 'idle',
   error: null,
   places: [],
-  boundary: null,
+  boundary: SEOUL_BOUNDARY,
   selected: null,
 }
 const listeners = new Set<() => void>()
@@ -134,7 +135,8 @@ async function loadBoundary() {
   if (boundaryRequested) return
   boundaryRequested = true
   try {
-    set({ boundary: parseBoundary(await getJson('/map/areas')) })
+    const boundary = parseBoundary(await getJson('/map/areas'))
+    set({ boundary: boundary.length ? boundary : SEOUL_BOUNDARY })
   } catch {
     boundaryRequested = false
   }

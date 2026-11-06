@@ -1,3 +1,5 @@
+import KakaoGeoMap from './KakaoGeoMap'
+import { SEOUL_VIEW_BOUNDS } from '../data/seoulBoundary'
 import markerIcons from '../data/icons.json'
 import { loadSeoulMapData } from '../data/seoulMapData'
 import { useParkingData } from '../parking/useParkingData'
@@ -12,7 +14,7 @@ import { DEPARTURES, placeById } from '../domain.js'
 import { useDemo } from '../useDemo'
 import MapRecord from './MapRecord'
 import Icon from './Icon'
-import { getMapOverlay, type MapOverlay } from './shell/useRoute'
+import { PARKING_SELECT_EVENT, getMapOverlay, type MapOverlay } from './shell/useRoute'
 import { createLiveLayers } from '../live/liveLayers'
 import { selectLivePlace, startLive, useLive } from '../live/store'
 /** On phones the bottom sheet covers the map, so keep markers above it. */
@@ -21,13 +23,27 @@ function bottomPadding() {
   if (matchMedia('(max-width:900px)').matches && sheet) return sheet.offsetHeight + 24
   return 220
 }
+function fitSeoul(instance: ReturnType<typeof L.map>) {
+  instance.fitBounds(SEOUL_VIEW_BOUNDS, {
+    paddingTopLeft: [28, 36],
+    paddingBottomRight: [
+      28,
+      matchMedia('(max-width:900px)').matches
+        ? Math.min(bottomPadding(), instance.getSize().y * 0.45)
+        : 36,
+    ],
+    maxZoom: 11,
+    animate: false,
+  })
+}
+
 const BOUNDS = [
   [37.4, 126.72],
   [37.77, 127.25],
 ]
 const inside = (point: { lat: number; lon: number }) =>
   point.lat >= 37.4 && point.lat <= 37.77 && point.lon >= 126.72 && point.lon <= 127.25
-export default function GeoMap({
+function LeafletGeoMap({
   preview = false,
   parkingHintRequested = false,
 }: {
@@ -38,6 +54,8 @@ export default function GeoMap({
   const parkingData = useParkingData('map')
   const live = useLive()
   const liveLayers = useRef<ReturnType<typeof createLiveLayers> | null>(null)
+  const confirmedParking = active.parkingSelections?.[active.selected || ''] || null
+  const parkingFocus = useRef<string | null>(confirmedParking)
   const parkingController = useRef<ReturnType<typeof createMapLayers> | null>(null)
   const currentParking = useEffectEvent(() => parkingData.lots)
   const root = useRef<HTMLDivElement>(null)
@@ -198,7 +216,7 @@ export default function GeoMap({
     if (!root.current) return
     const instance = L.map(root.current, {
       zoomControl: false,
-      minZoom: 11,
+      minZoom: matchMedia('(max-width:900px)').matches ? 10 : 11,
       maxZoom: 19,
       maxBounds: BOUNDS,
       maxBoundsViscosity: 1,
@@ -216,9 +234,8 @@ export default function GeoMap({
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>',
       noWrap: true,
-      bounds: BOUNDS,
-      keepBuffer: 0,
-      updateWhenIdle: true,
+      keepBuffer: 3,
+      updateWhenIdle: false,
     })
     let failed = false
     tiles.on('loading', () => {
@@ -241,6 +258,7 @@ export default function GeoMap({
     instance.on('moveend zoomend', onView)
     const resize = () => {
       if (root.current?.clientWidth && root.current.clientHeight) {
+        instance.setMinZoom(matchMedia('(max-width:900px)').matches ? 10 : 11)
         instance.invalidateSize({ pan: false })
         root.current
           .closest<HTMLElement>('.map-panel')
@@ -253,6 +271,7 @@ export default function GeoMap({
     const observer = new ResizeObserver(resize)
     observer.observe(root.current)
     resize()
+    if (!view?.center) fitSeoul(instance)
     return () => {
       stopLive()
       liveLayers.current?.destroy()
@@ -377,7 +396,7 @@ export default function GeoMap({
       instance.fitBounds(coordinates, {
         paddingTopLeft: [64, 84],
         paddingBottomRight: [64, bottomPadding()],
-        maxZoom: 14,
+        maxZoom: 12,
         animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
       })
     return () => {
@@ -419,7 +438,10 @@ export default function GeoMap({
         })
       })
       .then(() => {
-        if (!cancelled && controller) parkingController.current = controller
+        if (!cancelled && controller) {
+          parkingController.current = controller
+          controller.highlightParking(parkingFocus.current)
+        }
       })
       .catch(() => {
         if (!cancelled)
@@ -449,6 +471,19 @@ export default function GeoMap({
   useEffect(() => {
     parkingController.current?.updateParking(parkingData.lots)
   }, [parkingData.lots])
+  useEffect(() => {
+    parkingFocus.current = confirmedParking
+    parkingController.current?.highlightParking(confirmedParking)
+  }, [confirmedParking, active.selected, active.trip])
+  useEffect(() => {
+    const highlight = (event: Event) => {
+      const id = (event as CustomEvent<{ id: string }>).detail.id
+      parkingFocus.current = id
+      parkingController.current?.highlightParking(id)
+    }
+    window.addEventListener(PARKING_SELECT_EVENT, highlight)
+    return () => window.removeEventListener(PARKING_SELECT_EVENT, highlight)
+  }, [])
   const [locating, setLocating] = useState(false)
   const myLocation = useRef<ReturnType<typeof L.layerGroup> | null>(null)
   function locateMe() {
@@ -505,22 +540,9 @@ export default function GeoMap({
     )
   }
   function recenter() {
-    const instance = map.current
-    if (!instance) return
-    const coordinates = (mapResult?.entries || [])
-      .map((e) => placeById(e.id))
-      .filter((p) => !!p)
-      .map((p) => [p.lat, p.lon])
-    const origin = departure ? DEPARTURES[departure] : null
-    if (origin && inside(origin)) coordinates.push([origin.lat, origin.lon])
-    if (coordinates.length)
-      instance.fitBounds(coordinates, {
-        paddingTopLeft: [64, 84],
-        paddingBottomRight: [64, bottomPadding()],
-        maxZoom: 14,
-      })
-    else instance.setView([37.5665, 126.978], 12)
+    if (map.current) fitSeoul(map.current)
   }
+
   return (
     <>
       <div
@@ -559,12 +581,7 @@ export default function GeoMap({
         >
           <Icon name="locate" />
         </button>
-        <button
-          type="button"
-          aria-label={mapResult?.entries.length ? '추천 결과 전체 보기' : '서울 전체 보기'}
-          title="전체 보기"
-          onClick={recenter}
-        >
+        <button type="button" aria-label="서울 전체 보기" title="서울 전체 보기" onClick={recenter}>
           <Icon name="fit" />
         </button>
       </div>
@@ -589,5 +606,13 @@ export default function GeoMap({
           popup.host,
         )}
     </>
+  )
+}
+
+export default function GeoMap(props: { preview?: boolean; parkingHintRequested?: boolean }) {
+  return import.meta.env.VITE_KAKAO_MAP_APP_KEY?.trim() ? (
+    <KakaoGeoMap {...props} />
+  ) : (
+    <LeafletGeoMap {...props} />
   )
 }

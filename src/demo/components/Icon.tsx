@@ -23,6 +23,12 @@ const icons: Record<string, ReactNode> = {
   chevronDown: <path d="m5 9 7 7 7-7" />,
   back: <path d="M20 12H4m6-6-6 6 6 6" />,
   bookmark: <path d="M7 3h10a1 1 0 0 1 1 1v17l-6-4-6 4V4a1 1 0 0 1 1-1Z" />,
+  bookmarkRemove: (
+    <>
+      <path d="M18 10V4a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v17l6-4 3 2" />
+      <path d="m16 14 6 6m0-6-6 6" />
+    </>
+  ),
   pin: (
     <>
       <path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z" />

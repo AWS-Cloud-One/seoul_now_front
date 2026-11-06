@@ -217,7 +217,10 @@ Copy-Item .env.example .env
 | ------------------------ | ------------------------------------------------------------------ |
 | `VITE_API_BASE_URL`      | 향후 브라우저 코드에서 사용할 API 기준 경로. 기본 `/api/v1`        |
 | `API_PROXY_TARGET`       | Vite가 API 요청을 전달할 백엔드 주소. 기본 `http://127.0.0.1:8000` |
-| `VITE_KAKAO_MAP_APP_KEY` | 향후 지도에 사용할 JavaScript 키. 지금은 비워 둠                   |
+| `VITE_KAKAO_MAP_APP_KEY` | 카카오 지도 JavaScript 키. 설정하면 카카오 지도, 미설정이면 기본 지도 사용 |
+| `APP_KAKAO_REST_API_KEY` | 로컬 Vite 서버의 장소 검색·자동차 길찾기용 REST 키. 클라이언트에 포함되지 않음 |
+
+카카오 개발자 콘솔에 접속 도메인(로컬은 `http://127.0.0.1:5173`)을 등록합니다. 개발 서버는 위 REST 키가 있으면 `/api/v1/kakao/places`, `/api/v1/kakao/directions`를 직접 처리합니다. 배포 환경에서는 기존 백엔드의 동일 API와 서버 환경변수 `APP_KAKAO_REST_API_KEY`를 사용해야 합니다. 서울 도시데이터·챗봇은 별도 API입니다.
 
 프록시는 브라우저의 요청을 백엔드로 전달하는 중간 연결입니다. 설정은 다음 흐름으로 준비되어 있습니다.
 

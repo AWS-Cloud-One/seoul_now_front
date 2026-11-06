@@ -68,9 +68,19 @@ it('추천 전 전체 지도에서도 주차장과 갱신된 잔여 대수를 �
     onParkingHint: vi.fn(),
   })
   expect(container.querySelector('.registered-parking-marker')?.textContent).toBe('')
+  controller.highlightParking('overview-parking')
+  expect(container.querySelector('.sn-focused-parking')).toHaveAttribute('aria-pressed', 'true')
+  expect(container.querySelector('.registered-parking-marker')).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  )
   controller.updateParking(normalizeParkingResponse([{ ...parking, availableSpaces: 0 }]))
   await new Promise((resolve) => requestAnimationFrame(resolve))
   const marker = container.querySelector('.registered-parking-marker')!
+  expect(container.querySelector('.sn-focused-parking')).not.toBeNull()
+  controller.highlightParking(null)
+  expect(container.querySelector('.sn-focused-parking')).toBeNull()
+  expect((marker as HTMLElement).style.visibility).toBe('')
   expect(marker.textContent).toBe('만차')
   marker.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   expect(onRecord.mock.calls[0][0]).toMatchObject({
@@ -186,4 +196,36 @@ it('실제 Leaflet에 원본 도로·주차·인구 레이어를 연결하고 �
   expect(container.querySelector('.population-heat-canvas')).toHaveAttribute('hidden')
   expect(container.querySelector('.registered-parking-marker')).toBeNull()
   next.destroy()
+})
+
+it('같은 묶음의 동명 주차장을 골라도 개별 핀과 주소를 구분한다', () => {
+  instance.setView([37.55, 126.97], 14)
+  const controller = createMapLayers(instance, {
+    data: { roads: [], parking: [], population: { features: [] } },
+    parkingRecords: normalizeParkingResponse([
+      { id: 'a', name: '동명 주차장', address: '연남동 149-15', lat: 37.55, lng: 126.97 },
+      { id: 'b', name: '동명 주차장', address: '연남동 150-1', lat: 37.55001, lng: 126.97001 },
+    ]),
+    overview: true,
+    layers: { roads: false, parking: true, population: false },
+    result: null,
+    selected: null,
+    onRecord: vi.fn(),
+    onParkingHint: vi.fn(),
+  })
+  controller.highlightParking('a')
+  expect(container.querySelector('.sn-focused-parking')).toHaveAttribute(
+    'aria-label',
+    '살펴보는 주차장: 동명 주차장 · 연남동 149-15',
+  )
+  expect(container.querySelector('.registered-parking-marker.is-selected')).toBeNull()
+  controller.highlightParking('b')
+  expect(container.querySelectorAll('.sn-focused-parking')).toHaveLength(1)
+  expect(container.querySelector('.sn-focused-parking')).toHaveAttribute(
+    'aria-label',
+    '살펴보는 주차장: 동명 주차장 · 연남동 150-1',
+  )
+  expect(container.querySelector('.sn-focused-parking-label')).toHaveTextContent('연남동 150-1')
+  controller.destroy()
+  expect(container.querySelector('.sn-focused-parking')).toBeNull()
 })

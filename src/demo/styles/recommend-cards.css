@@ -261,3 +261,14 @@
 .sn-parking-confirm .sn-btn {
   width: 100%;
 }
+
+.sn-parking-confirmed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sn-parking-confirmed .icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}

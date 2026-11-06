@@ -1,0 +1,39 @@
+.sn-saved-card {
+  flex-direction: column;
+}
+.sn-saved-card .sn-place-main {
+  padding: 14px;
+}
+.sn-saved-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: flex-end;
+  min-height: 44px;
+  margin: 0 8px 6px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--sn-select);
+  color: var(--sn-brand-hover);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sn-saved-remove:hover {
+  background: var(--sn-brand);
+  color: #fff;
+}
+.sn-saved-remove .icon {
+  width: 18px;
+  height: 18px;
+}
+.sn-saved-card .sn-place-reason {
+  color: var(--sn-brand-hover);
+  font-weight: 600;
+}
+.sn-saved-remove:focus-visible {
+  outline: 2px solid var(--sn-brand);
+  outline-offset: 2px;
+}

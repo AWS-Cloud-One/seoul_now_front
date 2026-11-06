@@ -98,3 +98,70 @@
 .sn-map .destination-label::before {
   display: none;
 }
+
+/* A separate pin identifies the exact lot; cluster counts keep their neutral appearance. */
+.sn-map .sn-focused-parking {
+  position: absolute;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  filter: drop-shadow(0 3px 5px #155ed455);
+}
+.sn-focused-parking::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  width: 32px;
+  height: 32px;
+  border: 2px solid #fff;
+  border-radius: 50% 50% 0 50%;
+  background: #176bea;
+  transform: rotate(45deg);
+}
+.sn-focused-parking .parking-icon {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 20px;
+  height: 20px;
+}
+.sn-map .sn-focused-parking-label {
+  width: 220px;
+  min-width: 160px;
+  padding: 7px 10px;
+  border: 1px solid #b7d2fa;
+  border-radius: 10px;
+  background: #fff;
+  color: #213c60;
+  box-shadow: 0 2px 8px #173a6026;
+  font-family: var(--app-font);
+  max-width: 240px;
+  white-space: normal;
+  word-break: keep-all;
+}
+.sn-focused-parking-label strong,
+.sn-focused-parking-label span {
+  display: block;
+}
+.sn-focused-parking-label strong {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.sn-focused-parking-label span {
+  color: #55687d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.sn-parking-address {
+  line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.map-record-availability-note {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  line-height: 1.6;
+}

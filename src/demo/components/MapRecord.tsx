@@ -1,4 +1,3 @@
-import { parkingAvailability } from '../parking/display'
 import type { MapRecord as RecordData, ParkingRecord } from '../mapLayers'
 import { dateLabel } from '../domain.js'
 import type { ReactNode } from 'react'
@@ -170,6 +169,11 @@ export default function MapRecord({
       title={parking.name}
       foot={
         <>
+          {parking.available === null && (
+            <span className="map-record-availability-note">
+              실시간 빈자리 정보가 제공되지 않아요.
+            </span>
+          )}
           {sources[parking.source || ''] || parking.source || '출처 미제공'}
           <br />
           {parking.collectedAt ? dateLabel(parking.collectedAt) : '시각 미제공'} 수집 ·
@@ -178,14 +182,18 @@ export default function MapRecord({
       }
     >
       <p className="map-record-sub">{parking.address || '주소 미확인'}</p>
-      <div className="parking-availability">{parkingAvailability(parking.available)}</div>
+      {parking.available !== null && (
+        <div className={`parking-availability ${parking.available === 0 ? 'is-full' : ''}`}>
+          {parking.available === 0 ? '만차' : `잔여 ${number(parking.available)}면`}
+        </div>
+      )}
       <dl>
         <div>
           <dt>구분</dt>
           <dd>{parking.kind || '미확인'}</dd>
         </div>
         <div>
-          <dt>등록 총면수</dt>
+          <dt>전체 주차면</dt>
           <dd>{parking.capacity === null ? '미확인' : `${number(parking.capacity)}면`}</dd>
         </div>
         <div>

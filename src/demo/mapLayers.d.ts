@@ -38,4 +38,9 @@ export function createMapLayers(
     onRecord: (record: MapRecord, latlng: [number, number] | { lat: number; lng: number }) => void
     onParkingHint: (visible: boolean, zoom: () => void) => void
   },
-): { update(): void; updateParking(records: ParkingRecord[]): void; destroy(): void }
+): {
+  highlightParking(id: string | null): void
+  update(): void
+  updateParking(records: ParkingRecord[]): void
+  destroy(): void
+}

@@ -1,0 +1,108 @@
+.sn-kakao-map {
+  background: #edf1ed;
+}
+.sn-kakao-parking {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 5px 10px;
+  border: 1px solid #9cd5fa;
+  border-radius: 999px;
+  background: #edf8ff;
+  color: #078acc;
+  box-shadow: 0 2px 5px #16477526;
+  font: 700 14px var(--app-font);
+}
+.sn-kakao-parking svg {
+  width: 19px;
+  height: 19px;
+}
+.sn-kakao-place-pin {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 44px;
+  min-height: 44px;
+  padding: 8px 8px 14px;
+  border: 2px solid #fff;
+  border-radius: 20px 20px 20px 4px;
+  background: #3989f1;
+  color: #fff;
+  box-shadow: 0 3px 8px #1b5ec64d;
+}
+.sn-kakao-place-pin.is-selected {
+  background: #0754d9;
+}
+.sn-kakao-place-pin svg {
+  width: 20px;
+  height: 20px;
+}
+.sn-kakao-pin-label {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: block;
+  padding: 5px 9px;
+  border: 1px solid #d9e4f3;
+  border-radius: 10px;
+  background: #fff;
+  color: #213c60;
+  font: 700 12px var(--app-font);
+  white-space: nowrap;
+}
+.sn-kakao-address {
+  display: block;
+  color: #607286;
+  font-size: 11px;
+  font-weight: 400;
+}
+.sn-kakao-origin {
+  display: block;
+  padding: 4px 8px;
+  background: #fff;
+  border: 2px solid #176bea;
+  border-radius: 12px;
+  color: #1758aa;
+  font: 600 12px var(--app-font);
+}
+.sn-kakao-record {
+  position: absolute;
+  z-index: 650;
+  top: 70px;
+  left: 16px;
+  width: 280px;
+  max-width: calc(100% - 80px);
+  padding: 18px;
+  border: 1px solid #dce4ef;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 4px 18px #19395933;
+  max-height: 70%;
+  overflow-y: auto;
+}
+.sn-kakao-record-close {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  font-size: 24px;
+  background: transparent;
+  border: 0;
+  color: #607286;
+}
+.sn-kakao-error,
+.sn-kakao-loading {
+  position: absolute;
+  z-index: 600;
+  top: 80px;
+  left: 16px;
+  padding: 16px;
+  border: 1px solid #dce4ef;
+  border-radius: 12px;
+  background: #fff;
+  max-width: calc(100% - 80px);
+}

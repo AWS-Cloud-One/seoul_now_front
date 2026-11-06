@@ -12,7 +12,7 @@ const esc = (value: string) => value.replace(/[&<>"']/g, (c) => `&#${c.charCodeA
 /** Greys out everything outside Seoul and draws live hotspot areas on the shared map. */
 export function createLiveLayers(map: LeafletMap, options: { onSelect: (code: string) => void }) {
   const maskPane = map.getPane('seoul-mask') || map.createPane('seoul-mask')
-  maskPane.style.zIndex = '330'
+  maskPane.style.zIndex = '450'
   maskPane.style.pointerEvents = 'none'
   const placePane = map.getPane('live-places') || map.createPane('live-places')
   placePane.style.zIndex = '410'
