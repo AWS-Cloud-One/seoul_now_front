@@ -498,16 +498,10 @@ body.workspace-mode .compact-place .place-number {
   overflow: hidden;
   box-shadow: none;
 }
-@font-face {
-  font-family: 'Gamja Flower';
-  src: url('../assets/gamja-flower-title.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
+
 .unified-chat .chat-head .chat-heading-copy h2,
 .chat-dialog .chat-head .chat-heading-copy h2 {
-  font-family: 'Gamja Flower', cursive;
+  font-family: var(--app-font);
   font-weight: 400;
   font-size: 32px;
   line-height: 1.05;
@@ -516,7 +510,7 @@ body.workspace-mode .compact-place .place-number {
 }
 .unified-chat .chat-head .chat-heading-copy p,
 .chat-dialog .chat-head .chat-heading-copy p {
-  font-family: 'Gamja Flower', cursive;
+  font-family: var(--app-font);
   font-size: 19px;
   font-weight: 400;
   line-height: 1.25;
@@ -546,7 +540,7 @@ body.workspace-mode .compact-place .place-number {
 }
 .unified-chat .chat-head .chat-heading-copy p,
 .chat-dialog .chat-head .chat-heading-copy p {
-  font-family: inherit;
+  font-family: var(--app-font);
   font-size: 12px;
   font-weight: 400;
   line-height: 1.5;
@@ -666,7 +660,7 @@ html.map-preview #main .map-parking-zoom-hint {
   display: inline-block;
   margin: 0 0 0 8px;
   padding: 0;
-  font-family: inherit;
+  font-family: var(--app-font);
   font-size: 11px;
   font-weight: 400;
   line-height: 22px;
@@ -1011,15 +1005,9 @@ body.workspace-mode .mobile-chat-launch:hover {
   pointer-events: auto;
 }
 
-@font-face {
-  font-family: 'Gowun Dodum';
-  src: url('../assets/gowun-dodum-regular.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
+
 :root {
-  font-family: 'Gowun Dodum', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  font-family: var(--app-font);
   font-synthesis: weight;
 }
 body,
@@ -1028,11 +1016,11 @@ input,
 select,
 textarea,
 .map-record-popup .leaflet-popup-content {
-  font-family: 'Gowun Dodum', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  font-family: var(--app-font);
   letter-spacing: -0.015em;
 }
 .start-screen-copy h1 {
-  font-family: 'Gowun Dodum', sans-serif;
+  font-family: var(--app-font);
   letter-spacing: -0.035em;
 }
 .chat-message .chat-place-card .carousel-card-heading strong {
@@ -1065,4 +1053,55 @@ textarea,
   html.map-preview #main .map-controls {
     top: calc(96px + env(safe-area-inset-top));
   }
+}
+
+/* Parking markers: colored car icon instead of the "P" letter */
+.registered-parking-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  background: #2563eb;
+  border: 2px solid #fff;
+  border-radius: 10px;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
+  font:
+    700 12px var(--app-font);
+}
+body.workspace-mode .registered-parking-marker,
+html.map-preview .registered-parking-marker {
+  border-radius: 10px;
+}
+.registered-parking-marker .parking-icon {
+  flex: none;
+}
+.registered-parking-marker b {
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: inherit;
+}
+.registered-parking-marker.is-cluster {
+  background: #2563eb;
+  border-color: #fff;
+}
+.registered-parking-marker.is-full {
+  background: #dc2626;
+}
+.registered-parking-marker.is-unknown {
+  background: #2563eb;
+}
+.registered-parking-marker:hover,
+.registered-parking-marker:focus-visible {
+  background: #2563eb;
+  border-color: #fff;
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+.registered-parking-marker.is-full:hover,
+.registered-parking-marker.is-full:focus-visible {
+  background: #b91c1c;
 }

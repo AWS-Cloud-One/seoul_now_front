@@ -12,3 +12,4 @@ agent/
 AGENTS.md
 .DS_Store
 .idea/
+/artifacts/

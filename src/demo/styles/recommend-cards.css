@@ -1,0 +1,263 @@
+/* Give the description the full card width; the rank and action share only the title row. */
+.sn-place-card {
+  position: relative;
+  border-radius: 16px;
+}
+.sn-place-card .sn-place-main {
+  display: block;
+  width: 100%;
+  padding: 18px 16px;
+}
+.sn-place-card .sn-place-body {
+  gap: 10px;
+  width: 100%;
+}
+.sn-place-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding-right: 28px;
+}
+.sn-place-heading strong {
+  font-size: 17px;
+  line-height: 1.5;
+  letter-spacing: -0.025em;
+}
+.sn-place-heading .sn-rank {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-top: 1px;
+}
+.sn-place-card .sn-place-more {
+  position: absolute;
+  top: 8px;
+  right: 4px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+}
+.sn-place-card .sn-place-meta {
+  font-size: 13px;
+}
+.sn-place-card .sn-place-reason {
+  -webkit-line-clamp: 2;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--sn-text-2);
+}
+.sn-place-card .sn-place-facts {
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 0;
+}
+.sn-place-total {
+  color: var(--sn-text-2);
+  font-size: 12px;
+}
+.sn-place-card .sn-place-tags {
+  gap: 12px;
+}
+.sn-place-card .sn-place-tags span {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  color: var(--sn-text-2);
+  font-size: 12px;
+}
+.sn-place-card.is-selected {
+  box-shadow: inset 3px 0 0 var(--sn-brand);
+  background: #f6f9ff;
+}
+.sn-list:has(.sn-place-card) {
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .sn-app[data-route='recommend'][data-has-results='true'][data-sheet='half'] .sn-panel {
+    height: min(64dvh, calc(100% - 120px - env(safe-area-inset-bottom)));
+  }
+  .sn-app[data-keyboard='true'][data-route='recommend'][data-has-results='true'] .sn-panel {
+    height: var(--sn-visible-height, 100dvh);
+  }
+  .sn-place-card .sn-place-main {
+    padding: 16px;
+  }
+}
+@media (max-width: 900px) and (max-height: 500px) {
+  .sn-app[data-route='recommend'][data-has-results='true']:not([data-sheet='peek']) .sn-panel {
+    height: calc(100% - 76px - env(safe-area-inset-bottom));
+  }
+  .sn-app[data-keyboard='true'][data-route='recommend'][data-has-results='true'] .sn-panel {
+    height: var(--sn-visible-height, 100dvh);
+  }
+}
+
+@media (max-width: 900px) {
+  .sn-app[data-route='recommend'] .sn-panel-foot.is-row {
+    padding: 8px 12px;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+  .sn-app[data-route='recommend'] .sn-panel-foot .sn-btn {
+    min-height: 40px;
+    padding: 0 8px;
+    font-size: 12px;
+    gap: 5px;
+  }
+  .sn-app[data-route='recommend'] .sn-panel-foot .sn-link {
+    white-space: nowrap;
+    font-size: 12px;
+  }
+}
+@media (max-width: 900px) and (min-height: 501px) and (max-height: 650px) {
+  .sn-app[data-route='recommend'][data-has-results='true'][data-sheet='half'] .sn-panel {
+    height: calc(100% - 120px - env(safe-area-inset-bottom));
+  }
+  .sn-app[data-keyboard='true'][data-route='recommend'][data-has-results='true'] .sn-panel {
+    height: var(--sn-visible-height, 100dvh);
+  }
+}
+
+.sn-place-card {
+  flex-direction: column;
+}
+.sn-place-expanded {
+  padding: 0 16px 16px;
+}
+.sn-place-walk {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 12px !important;
+  border-top: 1px solid var(--sn-line);
+  color: var(--sn-text-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.sn-place-walk .icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.sn-place-expanded-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.sn-place-expanded-actions .sn-btn {
+  flex: 1 1 auto;
+  min-height: 40px;
+  padding: 8px;
+  font-size: 12px;
+}
+
+/* Current conditions read as rows, so narrow panels never squeeze labels into tall columns. */
+.sn-current-facts {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border: 1px solid var(--sn-line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.sn-current-facts > div {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 14px;
+  border: 0;
+  border-radius: 0;
+  background: var(--sn-surface);
+  align-items: baseline;
+}
+.sn-current-facts > div + div {
+  border-top: 1px solid var(--sn-line);
+}
+.sn-current-facts dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.sn-current-facts dt .icon {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--sn-brand-ink);
+}
+.sn-current-facts dd {
+  grid-column: 2;
+  font-size: 16px;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+.sn-current-facts small {
+  grid-column: 2;
+  display: block;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.sn-current-note {
+  margin-top: 10px !important;
+  color: var(--sn-text-2);
+  font-size: 12px;
+  line-height: 1.7;
+  word-break: keep-all;
+}
+
+/* One outer border surrounds the parking information and its confirmation action. */
+.sn-parking-item {
+  border: 1px solid var(--sn-line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--sn-surface);
+}
+.sn-parking-item.is-picked {
+  border-color: var(--sn-brand);
+  background: var(--sn-select);
+}
+.sn-parking-item > .sn-parking-card {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.sn-parking-item > .sn-parking-card.is-selected {
+  box-shadow: none;
+}
+.sn-parking-confirm {
+  margin: 0 12px;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--sn-line);
+  background: transparent;
+}
+.sn-parking-confirm p {
+  margin: 0 !important;
+  color: var(--sn-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.sn-parking-confirm p span {
+  color: var(--sn-text-2);
+  font-size: 12px;
+  font-weight: 400;
+}
+.sn-parking-confirm small {
+  display: block;
+  margin: 4px 0 12px;
+  color: var(--sn-text-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.sn-parking-confirm .sn-btn {
+  width: 100%;
+}

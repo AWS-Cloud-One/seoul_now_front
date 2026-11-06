@@ -1,7 +1,8 @@
+@import './typography.css';
 @import 'tailwindcss' source('../');
 @source not '../demo/vendor';
 :root {
-  font-family: 'Segoe UI', sans-serif;
+  font-family: var(--app-font);
   color: #172c30;
   background: #f3f6f5;
 }

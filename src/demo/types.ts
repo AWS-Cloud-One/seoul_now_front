@@ -72,6 +72,7 @@ export type Trip = {
   excluded: string[]
   general: Result | null
   chat: Message[]
+  parkingSelections?: Record<string, string>
   pendingChat: { patch: Partial<Conditions>; need?: string } | null
   current: string | null
   selected: string | null
@@ -94,6 +95,7 @@ export type SavedTrip = {
   title: string
   savedAt: string
   result: Result
+  parkingSelections?: Record<string, string>
   selectedId: string | null
   general: boolean
   layers: Layers

@@ -67,11 +67,11 @@ it('추천 전 전체 지도에서도 주차장과 갱신된 잔여 대수를 �
     onRecord,
     onParkingHint: vi.fn(),
   })
-  expect(container.querySelector('.registered-parking-marker')?.textContent).toBe('P12')
+  expect(container.querySelector('.registered-parking-marker')?.textContent).toBe('')
   controller.updateParking(normalizeParkingResponse([{ ...parking, availableSpaces: 0 }]))
   await new Promise((resolve) => requestAnimationFrame(resolve))
   const marker = container.querySelector('.registered-parking-marker')!
-  expect(marker.textContent).toBe('P만차')
+  expect(marker.textContent).toBe('만차')
   marker.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   expect(onRecord.mock.calls[0][0]).toMatchObject({
     kind: 'parking',
@@ -157,7 +157,7 @@ it('실제 Leaflet에 원본 도로·주차·인구 레이어를 연결하고 �
   )
   await new Promise((resolve) => requestAnimationFrame(resolve))
   const updatedMarker = container.querySelector<HTMLElement>('.registered-parking-marker')!
-  expect(updatedMarker.textContent).toBe('P7')
+  expect(updatedMarker.textContent).toBe('')
   expect(updatedMarker.getAttribute('aria-label')).toContain('갱신 주차장')
   expect(container.querySelector('.leaflet-popup-content')?.textContent).toBe('열린 상세창')
   expect(container.querySelector('.population-heat-canvas')).toBe(heatBefore)
@@ -170,7 +170,7 @@ it('실제 Leaflet에 원본 도로·주차·인구 레이어를 연결하고 �
     normalizeParkingResponse([{ ...data.parking[0], totalSpaces: 80, availableSpaces: 0 }]),
   )
   await new Promise((resolve) => requestAnimationFrame(resolve))
-  expect(container.querySelector('.registered-parking-marker')?.textContent).toBe('P만차')
+  expect(container.querySelector('.registered-parking-marker')?.textContent).toBe('만차')
   controller.destroy()
   expect(container.querySelector('.population-heat-canvas')).toBeNull()
   expect(container.querySelector('.registered-parking-marker')).toBeNull()

@@ -1,0 +1,100 @@
+/* Reference-style parking pills and category pins. Leaflet owns positioning. */
+.sn-map .registered-parking-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1.5px solid #9cd5fa;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffffff, #e3f4ff);
+  color: #078acc;
+  opacity: 1;
+  box-shadow: 0 2px 7px #124d8029;
+  font: 700 15px var(--app-font);
+}
+.sn-map .registered-parking-marker svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+.sn-map .registered-parking-marker b {
+  color: #23415f;
+  font-size: 15px;
+}
+.sn-map .registered-parking-marker:is(:hover, :focus-visible, .is-selected) {
+  background: linear-gradient(180deg, #4998ff, #1964eb);
+  color: #fff;
+  border-color: #fff;
+  outline: 2px solid #9dcbff;
+  outline-offset: 0;
+}
+.sn-map .registered-parking-marker:is(:hover, :focus-visible, .is-selected) b {
+  color: #fff;
+}
+.sn-map .registered-parking-marker.is-full {
+  background: #fff1f0;
+  color: #b91c1c;
+  border-color: #efb5b1;
+}
+.sn-map .registered-parking-marker.is-full b {
+  color: #b91c1c;
+  font-size: 12px;
+}
+.sn-map .destination-marker,
+.sn-map .destination-marker:not(.selected),
+.sn-map .destination-marker.selected {
+  width: 40px !important;
+  height: 52px !important;
+  margin-left: -20px !important;
+  margin-top: -52px !important;
+  border: 0 !important;
+  border-radius: 0;
+  outline: none;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #fff;
+  filter: drop-shadow(0 4px 5px #1769e75c);
+}
+.sn-map .destination-marker::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(160deg, #68b2ff, #2475ee);
+  clip-path: path('M20 0C9 0 0 9 0 20C0 33 20 52 20 52S40 33 40 20C40 9 31 0 20 0Z');
+}
+.sn-map .destination-marker.selected::before {
+  background: linear-gradient(160deg, #2f91ff, #0754e8);
+}
+.sn-map .destination-marker.selected {
+  filter: drop-shadow(0 5px 8px #1769e780);
+}
+.destination-symbol {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 20px;
+  height: 22px;
+}
+.destination-symbol svg {
+  display: block;
+  width: 20px;
+  height: 22px;
+}
+.sn-map .destination-label {
+  border: 1px solid #e1e8f0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #fff;
+  color: #263b52;
+  box-shadow: 0 2px 7px #16395b20;
+  font: 700 13px var(--app-font);
+}
+.sn-map .destination-label.selected {
+  background: #0961dc;
+  color: #fff;
+  border-color: #fff;
+}
+.sn-map .destination-label::before {
+  display: none;
+}

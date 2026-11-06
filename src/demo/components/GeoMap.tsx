@@ -1,3 +1,4 @@
+import markerIcons from '../data/icons.json'
 import { loadSeoulMapData } from '../data/seoulMapData'
 import { useParkingData } from '../parking/useParkingData'
 import { resolveParkingPopup } from '../parking/popup'
@@ -11,6 +12,15 @@ import { DEPARTURES, placeById } from '../domain.js'
 import { useDemo } from '../useDemo'
 import MapRecord from './MapRecord'
 import Icon from './Icon'
+import { getMapOverlay, type MapOverlay } from './shell/useRoute'
+import { createLiveLayers } from '../live/liveLayers'
+import { selectLivePlace, startLive, useLive } from '../live/store'
+/** On phones the bottom sheet covers the map, so keep markers above it. */
+function bottomPadding() {
+  const sheet = document.querySelector<HTMLElement>('.sn-panel')
+  if (matchMedia('(max-width:900px)').matches && sheet) return sheet.offsetHeight + 24
+  return 220
+}
 const BOUNDS = [
   [37.4, 126.72],
   [37.77, 127.25],
@@ -24,8 +34,10 @@ export default function GeoMap({
   preview?: boolean
   parkingHintRequested?: boolean
 }) {
-  const { active, result, layers, ui, patchUI, openDetail, saveMap, notify } = useDemo()
+  const { active, result, layers, ui, patchUI, selectPlace, saveMap, notify } = useDemo()
   const parkingData = useParkingData('map')
+  const live = useLive()
+  const liveLayers = useRef<ReturnType<typeof createLiveLayers> | null>(null)
   const parkingController = useRef<ReturnType<typeof createMapLayers> | null>(null)
   const currentParking = useEffectEvent(() => parkingData.lots)
   const root = useRef<HTMLDivElement>(null)
@@ -33,6 +45,7 @@ export default function GeoMap({
   const markers = useRef<Map<string, ReturnType<typeof L.marker>>>(new Map())
   const [status, setStatus] = useState('서울 지도를 불러오는 중이에요…')
   const [zoom, setZoom] = useState(12)
+  const retryTiles = useRef<() => void>(() => {})
   const [popup, setPopup] = useState<{ record: RecordData; host: HTMLDivElement } | null>(null)
   const [parkingHint, setParkingHint] = useState(false)
   const zoomToParking = useRef<() => void>(() => {})
@@ -43,22 +56,126 @@ export default function GeoMap({
     const instance = map.current
     if (instance) {
       const center = instance.getCenter()
-      if (!preview)
-        saveMap({
-          center: [center.lat, center.lng],
-          zoom: instance.getZoom(),
-          resultId: result?.id,
-        })
+      saveMap({
+        center: [center.lat, center.lng],
+        zoom: instance.getZoom(),
+        resultId: result?.id,
+      })
       setZoom(instance.getZoom())
     }
   })
-  const onOpenDetail = useEffectEvent((id: string) => openDetail(id))
+  const onOpenDetail = useEffectEvent((id: string) => selectPlace(id))
   const onHover = useEffectEvent((id: string | null) => patchUI({ hover: id }))
+  useEffect(() => {
+    const instance = map.current
+    const place = placeById(active.selected)
+    if (!instance || !place) return
+    if (!matchMedia('(max-width:900px)').matches) {
+      // Desktop: bring the chosen destination into view without zooming out.
+      instance.setView([place.lat, place.lon], Math.max(instance.getZoom(), 15), { animate: false })
+      // The place card floats bottom-right; if it would cover the marker, slide the map up/left.
+      const card = document.querySelector('.sn-summary-card')
+      if (card) {
+        const mapBox = instance.getContainer().getBoundingClientRect()
+        const box = card.getBoundingClientRect()
+        const point = instance.latLngToContainerPoint([place.lat, place.lon])
+        const pad = 36
+        const x = point.x + mapBox.left
+        const y = point.y + mapBox.top
+        if (
+          x > box.left - pad &&
+          x < box.right + pad &&
+          y > box.top - pad &&
+          y < box.bottom + pad
+        ) {
+          instance.panBy([0, y - (box.top - pad)], { animate: false })
+        }
+      }
+      return
+    }
+    const sheet = document.querySelector<HTMLElement>('.sn-panel')
+    const target = instance.project([place.lat, place.lon], instance.getZoom())
+    // Shift the view so the selected marker sits in the visible area above the sheet.
+    const shifted = instance.unproject(
+      [target.x, target.y + (sheet?.offsetHeight ?? 300) / 2],
+      instance.getZoom(),
+    )
+    instance.panTo(shifted, { animate: !matchMedia('(prefers-reduced-motion: reduce)').matches })
+  }, [active.selected])
+  useEffect(() => {
+    let group: ReturnType<typeof L.layerGroup> | null = null
+    const draw = (overlay: MapOverlay) => {
+      const instance = map.current
+      if (!instance) return
+      group?.remove()
+      group = null
+      if (!overlay.route?.length && !overlay.food?.length) return
+      group = L.layerGroup().addTo(instance)
+      if (overlay.route?.length) {
+        // Own pane above the observed roads so the route is never buried under them.
+        if (!instance.getPane('sn-route')) instance.createPane('sn-route').style.zIndex = '450'
+        L.polyline(overlay.route, {
+          pane: 'sn-route',
+          color: '#ffffff',
+          weight: 10,
+          opacity: 0.95,
+          interactive: false,
+        }).addTo(group)
+        const line = L.polyline(overlay.route, {
+          pane: 'sn-route',
+          color: '#1d4ed8',
+          weight: 6,
+          opacity: 0.95,
+          interactive: false,
+        }).addTo(group)
+        instance.fitBounds(line.getBounds(), {
+          paddingTopLeft: [64, 84],
+          paddingBottomRight: [64, bottomPadding()],
+          animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
+        })
+      }
+      for (const food of overlay.food || []) {
+        const marker = L.marker([food.lat, food.lng], {
+          icon: L.divIcon({
+            className: 'sn-food-marker',
+            html: '<span></span>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          }),
+          title: food.name,
+          keyboard: true,
+        }).addTo(group)
+        marker.bindTooltip(food.name, {
+          direction: 'top',
+          offset: [0, -12],
+          className: 'destination-label',
+        })
+        marker.on('click', () =>
+          window.dispatchEvent(new CustomEvent('sn:food-select', { detail: { id: food.id } })),
+        )
+      }
+    }
+    const listener = (event: Event) => draw((event as CustomEvent<MapOverlay>).detail)
+    window.addEventListener('sn:map-overlay', listener)
+    draw(getMapOverlay())
+    const traffic = (event: Event) =>
+      liveLayers.current?.setTraffic((event as CustomEvent<MapOverlay>).detail.traffic)
+    window.addEventListener('sn:map-overlay', traffic)
+    return () => {
+      window.removeEventListener('sn:map-overlay', listener)
+      window.removeEventListener('sn:map-overlay', traffic)
+      group?.remove()
+    }
+  }, [])
   const initialView = useRef(preview ? undefined : active.workspaceView?.map)
   const firstLayout = useRef(true)
   const onRecord = useEffectEvent(
     (record: RecordData, latlng: [number, number] | { lat: number; lng: number }) => {
       if (!map.current) return
+      if (record.kind === 'parking') {
+        const id = (record.data as { records?: { id: string }[] }).records?.[0]?.id
+        if (id) window.dispatchEvent(new CustomEvent('sn:parking-select', { detail: { id } }))
+      }
       const host = document.createElement('div')
       const sdkPopup = L.popup({
         className: 'map-record-popup',
@@ -114,7 +231,13 @@ export default function GeoMap({
     tiles.on('load', () =>
       setStatus(failed ? '일부 지도를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.' : ''),
     )
+    retryTiles.current = () => {
+      setStatus('서울 지도를 다시 불러오는 중이에요…')
+      tiles.redraw()
+    }
     tiles.addTo(instance)
+    liveLayers.current = createLiveLayers(instance, { onSelect: selectLivePlace })
+    const stopLive = startLive()
     instance.on('moveend zoomend', onView)
     const resize = () => {
       if (root.current?.clientWidth && root.current.clientHeight) {
@@ -131,10 +254,39 @@ export default function GeoMap({
     observer.observe(root.current)
     resize()
     return () => {
+      stopLive()
+      liveLayers.current?.destroy()
+      liveLayers.current = null
       observer.disconnect()
       instance.off()
       instance.remove()
+      retryTiles.current = () => {}
       map.current = null
+    }
+  }, [])
+  useEffect(() => {
+    const focus = (event: Event) => {
+      const { lat, lng, zoom } = (event as CustomEvent<{ lat: number; lng: number; zoom: number }>)
+        .detail
+      map.current?.setView([lat, lng], zoom, {
+        animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
+      })
+    }
+    const fit = (event: Event) => {
+      const { points } = (event as CustomEvent<{ points: [number, number][] }>).detail
+      if (points.length < 2) return
+      map.current?.flyToBounds(points, {
+        paddingTopLeft: [40, 80],
+        paddingBottomRight: [60, 150],
+        maxZoom: 16,
+        animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
+      })
+    }
+    window.addEventListener('sn:map-focus', focus)
+    window.addEventListener('sn:map-fit', fit)
+    return () => {
+      window.removeEventListener('sn:map-focus', focus)
+      window.removeEventListener('sn:map-fit', fit)
     }
   }, [])
   useEffect(() => {
@@ -157,9 +309,9 @@ export default function GeoMap({
           iconAnchor: [14, 14],
         }),
         zIndexOffset: 1600,
-        title: `내 위치 · ${departure}`,
+        title: `출발지 · ${departure}`,
       }).addTo(group)
-      originMarker.bindTooltip('내 위치', {
+      originMarker.bindTooltip('출발지', {
         permanent: true,
         direction: 'left',
         offset: [-14, 0],
@@ -169,33 +321,41 @@ export default function GeoMap({
         onRecord({ kind: 'origin', data: { name: departure! } }, [origin.lat, origin.lon]),
       )
     }
-    for (const [index, entry] of (mapResult?.entries || []).entries()) {
+    for (const entry of mapResult?.entries || []) {
       const place = placeById(entry.id)
       if (!place) continue
       coordinates.push([place.lat, place.lon])
       const number = document.createElement('span')
-      number.textContent = String(index + 1)
+      number.className = 'destination-symbol'
+      const categoryIcons: Record<string, keyof typeof markerIcons> = {
+        카페: 'coffee',
+        식사: 'food',
+        산책: 'walk',
+        전시: 'art',
+      }
+      const symbol = markerIcons[categoryIcons[place.category] || 'pin']
+      number.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        symbol +
+        '</svg>'
       const marker = L.marker([place.lat, place.lon], {
         icon: L.divIcon({
           className: 'destination-marker',
           html: number,
-          iconSize: [38, 38],
-          iconAnchor: [19, 19],
+          iconSize: [40, 52],
+          iconAnchor: [20, 52],
         }),
         title: `${place.name} · 가상 예시`,
+        zIndexOffset: 1000,
         keyboard: true,
         autoPanOnFocus: false,
       }).addTo(group)
       const label = document.createElement('span')
       label.textContent = place.name
-      const nearOrigin =
-        origin &&
-        inside(origin) &&
-        instance.distance([place.lat, place.lon], [origin.lat, origin.lon]) < 450
       marker.bindTooltip(label, {
         permanent: true,
-        direction: nearOrigin ? 'top' : 'bottom',
-        offset: [0, nearOrigin ? -18 : 18],
+        direction: 'top',
+        offset: [0, -54],
         className: 'destination-label',
       })
       const element: HTMLElement | undefined = marker.getElement()
@@ -216,7 +376,7 @@ export default function GeoMap({
     if (coordinates.length && !restored)
       instance.fitBounds(coordinates, {
         paddingTopLeft: [64, 84],
-        paddingBottomRight: [64, 220],
+        paddingBottomRight: [64, bottomPadding()],
         maxZoom: 14,
         animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
       })
@@ -225,6 +385,12 @@ export default function GeoMap({
       currentMarkers.clear()
     }
   }, [mapResult, departure])
+  useEffect(() => {
+    liveLayers.current?.update(live, layers.population)
+  }, [live, layers.population])
+  useEffect(() => {
+    if (live.selected) liveLayers.current?.focus(live.selected)
+  }, [live.selected])
   const roads = layers.roads,
     parking = layers.parking,
     population = layers.population
@@ -283,6 +449,61 @@ export default function GeoMap({
   useEffect(() => {
     parkingController.current?.updateParking(parkingData.lots)
   }, [parkingData.lots])
+  const [locating, setLocating] = useState(false)
+  const myLocation = useRef<ReturnType<typeof L.layerGroup> | null>(null)
+  function locateMe() {
+    const instance = map.current
+    if (!instance) return
+    if (!('geolocation' in navigator)) {
+      notify('이 브라우저는 위치 조회를 지원하지 않아요.')
+      return
+    }
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setLocating(false)
+        if (!map.current) return
+        const point = { lat: coords.latitude, lon: coords.longitude }
+        if (!inside(point)) {
+          notify('현재 위치가 서울·인접 지역 지도 범위 밖이에요.')
+          return
+        }
+        myLocation.current?.remove()
+        const group = L.layerGroup().addTo(instance)
+        L.circle([point.lat, point.lon], {
+          radius: Math.max(coords.accuracy, 15),
+          color: '#2563eb',
+          weight: 1,
+          fillColor: '#2563eb',
+          fillOpacity: 0.12,
+          interactive: false,
+        }).addTo(group)
+        L.marker([point.lat, point.lon], {
+          icon: L.divIcon({
+            className: 'sn-my-location',
+            html: '<span></span>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+          }),
+          title: '내 위치',
+          keyboard: false,
+        }).addTo(group)
+        myLocation.current = group
+        instance.setView([point.lat, point.lon], Math.max(instance.getZoom(), 15))
+      },
+      (error) => {
+        setLocating(false)
+        notify(
+          error.code === error.PERMISSION_DENIED
+            ? '위치 권한이 거부됐어요. 브라우저 설정에서 허용한 뒤 다시 시도해 주세요.'
+            : error.code === error.TIMEOUT
+              ? '위치 확인 시간이 초과됐어요. 다시 시도해 주세요.'
+              : '현재 위치를 확인하지 못했어요.',
+        )
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
+    )
+  }
   function recenter() {
     const instance = map.current
     if (!instance) return
@@ -295,7 +516,7 @@ export default function GeoMap({
     if (coordinates.length)
       instance.fitBounds(coordinates, {
         paddingTopLeft: [64, 84],
-        paddingBottomRight: [64, 220],
+        paddingBottomRight: [64, bottomPadding()],
         maxZoom: 14,
       })
     else instance.setView([37.5665, 126.978], 12)
@@ -309,49 +530,53 @@ export default function GeoMap({
         role="region"
         aria-label="서울 지도. 방향키로 이동, 더하기와 빼기로 확대 축소"
       />
-      <div className="map-controls">
-        <button aria-label="지도 확대" disabled={zoom >= 19} onClick={() => map.current?.zoomIn()}>
+      <div className="sn-map-controls" role="group" aria-label="지도 조작">
+        <button
+          type="button"
+          aria-label="지도 확대"
+          title="확대"
+          disabled={zoom >= 19}
+          onClick={() => map.current?.zoomIn()}
+        >
           <Icon name="plus" />
         </button>
-        <button aria-label="지도 축소" disabled={zoom <= 11} onClick={() => map.current?.zoomOut()}>
+        <button
+          type="button"
+          aria-label="지도 축소"
+          title="축소"
+          disabled={zoom <= 11}
+          onClick={() => map.current?.zoomOut()}
+        >
           <Icon name="minus" />
         </button>
-        <button aria-label={preview ? '서울 전체 보기' : '추천 장소 전체 보기'} onClick={recenter}>
-          <Icon name="map" />
+        <button
+          type="button"
+          aria-label="내 위치 보기"
+          title="내 위치"
+          aria-busy={locating}
+          disabled={locating}
+          onClick={locateMe}
+        >
+          <Icon name="locate" />
         </button>
-        {departure && (
-          <button
-            aria-label={`내 위치 보기 · ${departure}`}
-            onClick={() => {
-              const origin = DEPARTURES[departure]
-              if (!origin || !inside(origin)) {
-                notify(
-                  `${departure}은 현재 서울·인접 지역 지도 범위 밖이에요. 출발지 설정은 그대로 유지돼요.`,
-                )
-                return
-              }
-              map.current?.setView([origin.lat, origin.lon], 15)
-            }}
-          >
-            <Icon name="locate" />
-          </button>
-        )}
+        <button
+          type="button"
+          aria-label={mapResult?.entries.length ? '추천 결과 전체 보기' : '서울 전체 보기'}
+          title="전체 보기"
+          onClick={recenter}
+        >
+          <Icon name="fit" />
+        </button>
       </div>
-      <span className="real-map-label">
-        {mapResult?.entries.length
-          ? `주차·인구 · 추천 ${mapResult.entries.length}곳 주변 800m`
-          : '서울·인접 지역 지도'}
-      </span>
       {parkingHint && (!preview || parkingHintRequested) && (
         <button className="map-parking-zoom-hint" onClick={() => zoomToParking.current()}>
-          <span aria-hidden="true">P</span>{' '}
-          {preview ? '확대해서 주차장 보기' : '추천 주변 주차장 보기'}
+          <Icon name="parking" /> {preview ? '확대해서 주차장 보기' : '추천 주변 주차장 보기'}
         </button>
       )}
       {status && (
         <div className="map-load-status" role="status">
           <span>{status}</span>
-          <button onClick={() => patchUI({ mapError: true })}>다시 시도</button>
+          <button onClick={() => retryTiles.current()}>다시 시도</button>
         </div>
       )}
       {popup &&
