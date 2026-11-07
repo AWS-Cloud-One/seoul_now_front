@@ -1,5 +1,38 @@
 import { expect, it, vi } from 'vitest'
 import { ApiProblem, fetchDirections, parseDirections, parseFood } from './api'
+import { routeTrafficColor } from './traffic'
+
+it('교통 상태와 구간 좌표를 보존하며 정보가 없는 구간은 회색이다', () => {
+  const route = parseDirections({
+    summary: { distance: 100, duration: 60 },
+    coordinates: [
+      [127, 37.5],
+      [127.1, 37.6],
+    ],
+    segments: [
+      {
+        coordinates: [
+          [127, 37.5],
+          [127.1, 37.6],
+        ],
+        traffic_state: 1,
+      },
+    ],
+  })
+  expect(route.segments).toEqual([
+    {
+      path: [
+        [37.5, 127],
+        [37.6, 127.1],
+      ],
+      state: 1,
+    },
+  ])
+  expect(routeTrafficColor(1)).toBe('#e62525')
+  expect(routeTrafficColor(4)).toBe('#00c73c')
+  expect(routeTrafficColor(99)).toBe(routeTrafficColor(0))
+  expect(parseDirections({ summary: { distance: 100, duration: 60 } }).segments).toEqual([])
+})
 
 it('경로 응답의 [경도, 위도]를 지도용 [위도, 경도]로 바꾸고 시간·거리·요금을 읽는다', () => {
   const route = parseDirections({

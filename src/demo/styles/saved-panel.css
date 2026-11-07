@@ -1,18 +1,20 @@
 .sn-saved-card {
+  position: relative;
   flex-direction: column;
 }
 .sn-saved-card .sn-place-main {
-  padding: 14px;
+  padding: 14px 58px 14px 14px;
 }
 .sn-saved-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  align-self: flex-end;
+  width: 44px;
   min-height: 44px;
-  margin: 0 8px 6px;
-  padding: 8px 12px;
+  padding: 10px;
   border: 0;
   border-radius: 8px;
   background: var(--sn-select);

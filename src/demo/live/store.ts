@@ -1,4 +1,5 @@
 import { SEOUL_BOUNDARY } from '../data/seoulBoundary'
+import { loadSeoulMapData } from '../data/seoulMapData'
 import { useSyncExternalStore } from 'react'
 
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
@@ -13,6 +14,7 @@ export const LEVEL_COLORS: Record<Level, string> = {
   '정보 없음': '#98a2b3',
 }
 export type LivePlace = {
+  saved?: boolean
   code: string
   name: string
   category: string
@@ -31,6 +33,7 @@ export type LiveState = {
   status: 'idle' | 'loading' | 'ready' | 'error'
   error: string | null
   places: LivePlace[]
+  savedPlaces: LivePlace[]
   /** Seoul administrative boundaries as rings of [lat, lng] (used to grey out everything else). */
   boundary: [number, number][][] | null
   selected: string | null
@@ -40,6 +43,7 @@ let state: LiveState = {
   status: 'idle',
   error: null,
   places: [],
+  savedPlaces: [],
   boundary: SEOUL_BOUNDARY,
   selected: null,
 }
@@ -120,11 +124,36 @@ async function getJson(path: string, signal?: AbortSignal) {
 let boundaryRequested = false
 let timer: ReturnType<typeof setInterval> | undefined
 let users = 0
+async function loadSavedPopulation() {
+  if (state.savedPlaces.length) return
+  try {
+    const { population } = await loadSeoulMapData()
+    const features = (population.features as Feature[]).map(({ geometry, properties: p }) => ({
+      geometry,
+      properties: {
+        ...p,
+        area_code: p.id,
+        population_min: p.min,
+        population_max: p.max,
+        source_time: p.observedAt,
+        replacement: p.replaced,
+        status: 'recent',
+      },
+    }))
+    set({ savedPlaces: parsePlaces({ features }).map((place) => ({ ...place, saved: true })) })
+  } catch {
+    // A later refresh can retry the saved file.
+  }
+}
+
 async function refresh() {
   try {
     const data = await getJson('/map/population/geometry')
-    set({ places: parsePlaces(data), status: 'ready', error: null })
+    const places = parsePlaces(data)
+    set({ places, status: 'ready', error: null })
+    if (!places.some((place) => !place.stale)) void loadSavedPopulation()
   } catch (error) {
+    void loadSavedPopulation()
     set({
       status: state.places.length ? 'ready' : 'error',
       error: (error as Error).message,
@@ -168,6 +197,58 @@ export type RoadSegment = {
   speed: number | null
   level: string
   path: [number, number][]
+}
+export type MapRoadSegment = import('../mapLayers').RoadRecord & {
+  path: [number, number][]
+}
+
+export async function fetchRoadTraffic(signal: AbortSignal): Promise<MapRoadSegment[]> {
+  const data: {
+    features?: {
+      id?: string
+      geometry?: { type: string; coordinates: [number, number][] }
+      properties?: {
+        road_name?: string
+        speed_kmh?: unknown
+        travel_time_seconds?: unknown
+        traffic_collected_at?: string
+        provider_observed_at?: string
+      }
+    }[]
+  } = await getJson('/traffic/network?limit=10000', signal).catch((error) => {
+    if (signal.aborted) throw error
+    return {}
+  })
+  const { roads } = await loadSeoulMapData()
+  const saved = roads as (MapRoadSegment & {
+    id: string
+    geometryLengthReviewNeeded?: boolean
+    mappingReviewNeeded?: boolean
+  })[]
+  const names = new Map(saved.map((road) => [road.id, road.name]))
+  const observed = (data.features || []).flatMap(({ id, geometry, properties }) => {
+    if (geometry?.type !== 'LineString') return []
+    const path = geometry.coordinates
+      .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat))
+      .map(([lng, lat]): [number, number] => [lat, lng])
+    if (path.length < 2) return []
+    return [
+      {
+        name: properties?.road_name || names.get(id || '') || '도로명 미확인',
+        speed: num(properties?.speed_kmh),
+        live: true,
+        classes: [],
+        direction: '',
+        travelSeconds: num(properties?.travel_time_seconds),
+        receivedAt: properties?.traffic_collected_at || '',
+        measurementTime: properties?.provider_observed_at || null,
+        path,
+      },
+    ]
+  })
+  return observed.some((road) => road.speed !== null)
+    ? observed
+    : saved.filter((road) => !road.geometryLengthReviewNeeded && !road.mappingReviewNeeded)
 }
 export type LiveDetail = {
   name: string

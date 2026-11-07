@@ -39,6 +39,18 @@ it('응답의 0, 미제공, 잘못된 수치와 중복 ID를 안전하게 구분
   expect(() => normalizeParkingResponse({ items: 'invalid' })).toThrow()
   expect(() => normalizeParkingResponse([{}])).toThrow()
 })
+it('지도와 조회 목록에 같은 시설의 주차 구획을 한 건으로 제공한다', async () => {
+  const shared = { ...row, code: '123', address: '미아동 458-7', source: 'public', totalSpaces: 1, availableSpaces: 0 }
+  const load = vi.fn().mockResolvedValue([
+    shared,
+    { ...shared, id: 'bay-two', lat: row.lat + 0.00005 },
+  ])
+  const store = createParkingStore({ kind: 'api', load })
+  await store.refresh('map')
+  expect(store.getSnapshot('map').lots).toMatchObject([
+    { memberIds: expect.arrayContaining(['one', 'bay-two']), capacity: 2 },
+  ])
+})
 it('폴링으로 갱신하고 오류에는 마지막 정상 자료를 유지하며 빈 응답은 반영한다', async () => {
   vi.useFakeTimers()
   const load = vi.fn().mockResolvedValue([row])
@@ -133,4 +145,14 @@ it('실제 지도에서 이미 열린 상세창도 최신 데이터와 삭제를
   })
   const removed = resolveParkingPopup(record, [])
   expect(removed.kind === 'parking' && removed.data.records).toEqual([])
+})
+
+it('열린 주차장 목록에서 이전 ID 두 개가 같은 시설로 합쳐지면 한 번만 표시한다', () => {
+  const [first, second] = normalizeParkingResponse([row, { ...row, id: 'second' }])
+  const location = { lat: row.lat, lng: row.lng, records: [first, second] }
+  const result = resolveParkingPopup(
+    { kind: 'parking-cluster', data: [{ location, record: first }, { location, record: second }] },
+    [{ ...first, memberIds: [first.id, second.id] }],
+  )
+  expect(result.kind === 'parking-cluster' && result.data.map((item) => item.record.id)).toEqual([first.id])
 })

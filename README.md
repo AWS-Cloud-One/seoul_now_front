@@ -13,7 +13,7 @@
 - 스타일: `src/demo/styles/` (원본 순서 유지), 이미지: `public/images/`
 - 기존 React/API 지도 화면: http://127.0.0.1:5173/developer.html (`src/LegacyApp.tsx`, 기존 환경변수와 백엔드 사용)
 - 저장한 여행: 추천 결과의 **여행 저장** 또는 챗봇 아래 **북마크 메뉴 → 현재 추천 저장**으로 보관합니다. 저장 목록은 `localStorage`의 `seoul-saved-trips-v1`에 유지되며, 목록을 누르면 새 요청 없이 저장 당시 추천·조건·선택 장소를 복원합니다. 최근 5개 추천 기록이나 세션 여행이 삭제돼도 저장본은 유지됩니다.
-- 보관용 원본: `public/demo/original.html`. 화면 하단 **HTML 파일 저장**에서 내려받으며, 앱 실행에는 사용하지 않습니다.
+- 현재 화면 검증: `src/demo/currentScreen.test.tsx`에서 시작 화면·주요 메뉴 이동·필수 이미지와 글꼴을 직접 검증합니다.
 - 검증: `npm run typecheck`, `npm run lint`, `npm run test -- --maxWorkers=1`, `npm run build`
 - `npm run build` 시 두 진입점이 모두 `dist/`에 생성됩니다.
 

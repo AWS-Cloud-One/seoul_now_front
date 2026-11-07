@@ -1,73 +1,67 @@
 import { useSelectedParking } from '../../parking/useSelectedParking'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DEPARTURES, dateLabel, placeById } from '../../domain.js'
 import { useDemo } from '../../useDemo'
 import { useLayout } from './layout'
 import Icon from '../Icon'
-import { fitMap } from './useRoute'
+import { fitMap, getMapOverlay, MAP_OVERLAY_EVENT } from './useRoute'
+import { useLive } from '../../live/store'
+import { POPULATION_HEAT_COLORS } from '../../live/populationHeat'
+import { ROAD_SPEED_COLORS } from '../../live/roadStyle'
 import { IconButton, PrimaryButton, SecondaryButton, StatusBadge } from './ui'
 
 const layerOptions = [
   ['parking', '주차장', 'parking'],
-  ['population', '관측 인구', 'people'],
-  ['roads', '도로 교통량', 'car'],
+  ['population', '유동인구수', 'people'],
+  ['roads', '도로혼잡도', 'car'],
 ] as const
 
 export function LayerMenu() {
   const { layers, toggleLayer } = useDemo()
-  const [open, setOpen] = useState(false)
-  const root = useRef<HTMLDivElement>(null)
+  const live = useLive()
+  const [routing, setRouting] = useState(() => !!getMapOverlay().route?.length)
   useEffect(() => {
-    if (!open) return
-    const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false)
-        root.current?.querySelector<HTMLButtonElement>('.sn-layer-trigger')?.focus()
-      }
-    }
-    const away = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('keydown', key)
-    document.addEventListener('pointerdown', away)
-    return () => {
-      document.removeEventListener('keydown', key)
-      document.removeEventListener('pointerdown', away)
-    }
-  }, [open])
+    const update = () => setRouting(!!getMapOverlay().route?.length)
+    window.addEventListener(MAP_OVERLAY_EVENT, update)
+    return () => window.removeEventListener(MAP_OVERLAY_EVENT, update)
+  }, [])
   return (
-    <div className="sn-layer-menu" ref={root}>
-      <button
-        type="button"
-        className="sn-glass sn-layer-trigger"
-        aria-expanded={open}
-        aria-controls="sn-layer-pop"
-        onClick={() => setOpen(!open)}
-      >
-        <Icon name="layers" />
-        지도 정보
-      </button>
-      {open && (
-        <div
-          className="sn-glass sn-layer-pop"
-          id="sn-layer-pop"
-          role="group"
-          aria-label="지도 정보"
-        >
-          <IconButton
-            className="sn-pop-close"
-            icon="close"
-            label="지도 정보 닫기"
-            onClick={() => setOpen(false)}
-          />
-          {layerOptions.map(([key, label, icon]) => (
-            <label key={key} className="sn-check">
-              <input type="checkbox" checked={layers[key]} onChange={() => toggleLayer(key)} />
-              <Icon name={icon} />
-              {label}
-            </label>
-          ))}
-        </div>
+    <div className="sn-map-layers">
+      <div className="sn-layer-buttons" role="group" aria-label="지도 표시 항목">
+        {layerOptions.map(([key, label, icon]) => (
+          <button
+            key={key}
+            type="button"
+            className={'sn-layer-toggle is-' + key}
+            aria-label={label + ' 표시'}
+            aria-pressed={layers[key] && !(key === 'roads' && routing)}
+            disabled={key === 'roads' && routing}
+            title={
+              key === 'roads' && routing
+                ? '길찾기 중에는 경로선의 교통 상태만 표시해요'
+                : label + ' 켜기 / 끄기'
+            }
+            onClick={() => toggleLayer(key)}
+          >
+            <Icon name={icon} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+      {layers.population && !live.places.some((place) => !place.stale) && live.savedPlaces.length > 0 && (
+        <p className="sn-population-status" role="status">
+          저장된 유동인구 관측을 표시하고 있어요.
+        </p>
+      )}
+      {layers.population && live.status === 'error' && !live.savedPlaces.length && (
+        <p className="sn-population-status" role="status">
+          유동인구 데이터를 불러오지 못했어요.
+        </p>
+      )}
+      {layers.population && live.status === 'loading' && !live.places.length && (
+        <p className="sn-population-status" role="status">
+          유동인구를 불러오는 중이에요…
+        </p>
       )}
     </div>
   )
@@ -86,7 +80,14 @@ function LegendGroups() {
       {layers.population && (
         <section className="sn-lg" aria-label="관측 인구 혼잡">
           <h4>관측 인구 혼잡</h4>
-          <div className="sn-lg-gradient" role="img" aria-label="여유에서 혼잡까지" />
+          <div
+            className="sn-lg-gradient"
+            role="img"
+            aria-label="여유에서 혼잡까지"
+            style={{
+              background: `linear-gradient(90deg, ${POPULATION_HEAT_COLORS.여유}, ${POPULATION_HEAT_COLORS.보통} 38%, ${POPULATION_HEAT_COLORS['약간 붐빔']} 68%, ${POPULATION_HEAT_COLORS.붐빔})`,
+            }}
+          />
           <div className="sn-lg-ends" aria-hidden="true">
             <span>여유</span>
             <span>혼잡</span>
@@ -95,13 +96,9 @@ function LegendGroups() {
       )}
       {layers.roads && (
         <section className="sn-lg" aria-label="도로 소통">
-          <h4>도로 소통</h4>
+          <h4>도로 소통 (km/h)</h4>
           <ul className="sn-lg-dots">
-            {[
-              ['#1f9d6b', '원활'],
-              ['#e0a21b', '서행'],
-              ['#d4443b', '정체'],
-            ].map(([color, label]) => (
+            {ROAD_SPEED_COLORS.map(({ color, label }) => (
               <li key={label}>
                 <i style={{ background: color }} />
                 {label}

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { DEPARTURES } from '../../domain.js'
-import { useDemo } from '../../useDemo'
+import OriginSearch from './OriginSearch'
 import {
   fetchLiveDetail,
   LEVEL_COLORS,
@@ -10,7 +9,7 @@ import {
 } from '../../live/store'
 import { searchPlaces, type FoundPlace } from '../../routing/api'
 import Icon from '../Icon'
-import { NearbyShopsSection, RouteSection } from './RouteSections'
+import { NearbyShopsSection, RouteSection, type Target } from './RouteSections'
 import { EmptyState, PanelHeader, SearchField, SecondaryButton, StatusBadge } from './ui'
 import { focusMap, setMapOverlay } from './useRoute'
 import type { Route } from './useRoute'
@@ -69,7 +68,7 @@ function ArrivalConditions({ code, onOpen }: { code: string; onOpen: () => void 
 
 export default function DirectionsPanel({ go }: { go: (route: Route) => void }) {
   const live = useLive()
-  const { active } = useDemo()
+  const [origin, setOrigin] = useState<Target | null>(null)
   const [query, setQuery] = useState('')
   const [dest, setDest] = useState<Destination | null>(null)
   const [found, setFound] = useState<
@@ -116,6 +115,7 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
         subtitle="출발지와 도착지를 정하면 자동차 경로와 도착지 주변 상황을 보여줘요."
       />
       <div className="sn-scroll">
+        <OriginSearch value={origin} onChange={setOrigin} />
         <section className="sn-section" aria-labelledby="sn-dir-dest">
           <h3 id="sn-dir-dest">도착지</h3>
           {dest ? (
@@ -222,9 +222,10 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
         {dest && (
           <>
             <RouteSection
-              key={`route-${dest.id}`}
+              key={`route-${dest.id}-${origin?.id || ''}`}
               place={{ id: dest.id, name: dest.name, lat: dest.lat, lon: dest.lon }}
-              departure={active.conditions.departure || Object.keys(DEPARTURES)[0]}
+              departure={null}
+              originOverride={origin}
             />
             {dest.liveCode && (
               <ArrivalConditions
@@ -243,12 +244,7 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
             </SecondaryButton>
           </>
         )}
-        {!dest && (
-          <p className="sn-note">
-            출발지는 도착지를 고른 뒤 아래에서 선택해요. ({Object.keys(DEPARTURES).length}곳 중
-            선택)
-          </p>
-        )}
+        {!dest && <p className="sn-note">출발지와 도착지를 검색해 선택해 주세요.</p>}
       </div>
     </>
   )

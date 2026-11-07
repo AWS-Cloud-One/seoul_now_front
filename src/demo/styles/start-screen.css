@@ -1,0 +1,13 @@
+.start-screen-wordmark {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: 1.21em;
+  object-fit: contain;
+  object-position: left center;
+}
+@media (min-width: 901px) {
+  .start-screen-wordmark {
+    height: 1.331em;
+  }
+}

@@ -20,20 +20,18 @@ describe('Kakao server adapter', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
   it('keeps authorization on the upstream request and converts road vertices to route coordinates', async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          routes: [
-            {
-              result_code: 0,
-              summary: { distance: 700, duration: 120 },
-              sections: [{ roads: [{ vertexes: [126.9, 37.5, 126.91, 37.51] }] }],
-            },
-          ],
-        }),
-      })
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        routes: [
+          {
+            result_code: 0,
+            summary: { distance: 700, duration: 120 },
+            sections: [{ roads: [{ traffic_state: 2, vertexes: [126.9, 37.5, 126.91, 37.51] }] }],
+          },
+        ],
+      }),
+    })
     vi.stubGlobal('fetch', fetcher)
     const result = await kakaoResponse(
       '/api/v1/kakao/directions',
@@ -46,6 +44,15 @@ describe('Kakao server adapter', () => {
       status: 200,
       body: {
         summary: { distance: 700, duration: 120 },
+        segments: [
+          {
+            coordinates: [
+              [126.9, 37.5],
+              [126.91, 37.51],
+            ],
+            traffic_state: 2,
+          },
+        ],
         coordinates: [
           [126.9, 37.5],
           [126.91, 37.51],

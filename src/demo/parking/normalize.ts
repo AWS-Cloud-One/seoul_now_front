@@ -40,6 +40,7 @@ export function normalizeParkingLot(value: unknown): ParkingLot | null {
     minutes = count(rate?.minutes)
   return {
     id,
+    ...(text(row.code) ? { code: text(row.code) } : {}),
     name: text(row.name) || '이름 미확인 주차장',
     lat: coordinate(row.lat, 90),
     lng: coordinate(row.lng, 180),

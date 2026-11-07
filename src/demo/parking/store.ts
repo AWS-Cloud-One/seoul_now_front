@@ -1,4 +1,5 @@
 import { normalizeParkingResponse } from './normalize'
+import { parkingFacilities } from './facilities'
 import type { ParkingScope, ParkingSnapshot, ParkingSource } from './types'
 
 export function createParkingStore(source: ParkingSource, refreshInterval = 30000) {
@@ -6,7 +7,7 @@ export function createParkingStore(source: ParkingSource, refreshInterval = 3000
     try {
       if (source.initialData?.[scope] !== undefined)
         return {
-          lots: normalizeParkingResponse(source.initialData[scope]),
+          lots: parkingFacilities(normalizeParkingResponse(source.initialData[scope])),
           status: 'success',
           error: null,
           refreshing: false,
@@ -51,7 +52,7 @@ export function createParkingStore(source: ParkingSource, refreshInterval = 3000
       const response = await source.load(scope, controller.signal)
       if (entry.version !== version || controller.signal.aborted) return
       publish(scope, {
-        lots: normalizeParkingResponse(response),
+        lots: parkingFacilities(normalizeParkingResponse(response)),
         status: 'success',
         error: null,
         refreshing: false,

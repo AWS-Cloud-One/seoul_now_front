@@ -1,5 +1,6 @@
 export type ParkingScope = 'preview' | 'map'
 export type ParkingLot = {
+  code?: string | null
   id: string
   name: string
   lat: number | null
@@ -21,7 +22,7 @@ export type ParkingSource = {
   load(scope: ParkingScope, signal: AbortSignal): Promise<unknown>
 }
 export type ParkingSnapshot = {
-  lots: ParkingLot[]
+  lots: import('./facilities').ParkingFacility[]
   status: 'idle' | 'loading' | 'success' | 'error'
   error: string | null
   refreshing: boolean

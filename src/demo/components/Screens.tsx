@@ -17,12 +17,16 @@ export function StartScreen() {
         <img src={image('images/seoul-wide.png')} alt="" fetchPriority="high" />
       </picture>
       <div className="start-screen-inner">
-        <div className="start-screen-brand">SEOUL NOW</div>
+        <div className="start-screen-brand">밖과사전</div>
         <div className="start-screen-copy">
           <h1 id="start-screen-title">
-            SEOUL,
-            <br />
-            지금 어디?
+            <img
+              className="start-screen-wordmark"
+              src={image('images/seoul-wordmark.svg')}
+              alt="SEOUL"
+              width="745"
+              height="359"
+            />
           </h1>
           <p>
             실시간 교통 및 주차 데이터를 바탕으로
