@@ -1,16 +1,15 @@
 import L from '../vendor/leaflet.js'
 import { LEVEL_COLORS, type LivePlace, type LiveState, type RoadSegment } from './store'
+import { roadSpeedColor } from './roadStyle'
 type LeafletMap = ReturnType<typeof L.map>
 
-const TRAFFIC_COLORS: Record<string, string> = {
-  원활: '#1f9d6b',
-  서행: '#e0a21b',
-  정체: '#d4443b',
-}
 const esc = (value: string) => value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
 /** Greys out everything outside Seoul and draws live hotspot areas on the shared map. */
-export function createLiveLayers(map: LeafletMap, options: { onSelect: (code: string) => void }) {
+export function createLiveLayers(
+  map: LeafletMap,
+  options: { onSelect: (place: LivePlace, point: { lat: number; lng: number }) => void },
+) {
   const maskPane = map.getPane('seoul-mask') || map.createPane('seoul-mask')
   maskPane.style.zIndex = '450'
   maskPane.style.pointerEvents = 'none'
@@ -58,35 +57,19 @@ export function createLiveLayers(map: LeafletMap, options: { onSelect: (code: st
       const selected = place.code === lastSelected
       const polygon = L.polygon(place.ring, {
         pane: 'live-places',
+        bubblingMouseEvents: false,
         color,
         weight: selected ? 3 : 0,
         opacity: selected ? 1 : 0,
         fillColor: color,
         fillOpacity: selected ? 0.12 : 0,
       }).addTo(places)
-      polygon.on('click', () => options.onSelect(place.code))
-      const pin = L.marker([place.lat, place.lng], {
-        pane: 'live-places',
-        icon: L.divIcon({
-          className: `sn-live-pin ${selected ? 'is-selected' : ''}`,
-          html: selected ? `<span style="background:${color}"></span>` : '',
-          iconSize: [20, 20],
-          iconAnchor: [10, 10],
-        }),
-        title: `${place.name} · ${place.level}`,
-        keyboard: true,
-        zIndexOffset: selected ? 500 : 0,
-      }).addTo(places)
-      pin.on('click', () => options.onSelect(place.code))
-      pin.bindTooltip(`${esc(place.name)} · ${esc(place.level)}`, {
-        direction: 'top',
-        offset: [0, -10],
-        className: 'destination-label',
-        permanent: selected,
-      })
+      polygon.on('click', (event: { latlng: { lat: number; lng: number } }) =>
+        options.onSelect(place, event.latlng),
+      )
     }
   }
-  map.on('zoomend', drawPlaces)
+  map.on('zoomend moveend resize', drawPlaces)
   return {
     update(state: LiveState, show: boolean) {
       drawMask(state.boundary)
@@ -109,7 +92,7 @@ export function createLiveLayers(map: LeafletMap, options: { onSelect: (code: st
     setTraffic(segments: RoadSegment[] | null) {
       traffic.clearLayers()
       for (const segment of segments || []) {
-        const color = TRAFFIC_COLORS[segment.level] || '#8999aa'
+        const color = roadSpeedColor(segment.speed)
         L.polyline(segment.path, {
           pane: 'live-traffic',
           color: '#ffffff',
@@ -131,7 +114,7 @@ export function createLiveLayers(map: LeafletMap, options: { onSelect: (code: st
       }
     },
     destroy() {
-      map.off('zoomend', drawPlaces)
+      map.off('zoomend moveend resize', drawPlaces)
       mask?.remove()
       places.remove()
       traffic.remove()

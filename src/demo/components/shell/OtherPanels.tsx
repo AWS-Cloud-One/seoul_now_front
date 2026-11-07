@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { conditionText, dateLabel, placeById } from '../../domain.js'
 import { useDemo } from '../../useDemo'
 import { parkingOperatingText } from '../../parking/display'
-import type { ParkingLot } from '../../parking/types'
+import type { ParkingFacility } from '../../parking/facilities'
 import { useParkingData } from '../../parking/useParkingData'
 import Icon from '../Icon'
 import {
@@ -42,6 +42,9 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
     selected ? active.parkingSelections?.[selected.id] || null : null,
   )
   const list = useRef<HTMLDivElement>(null)
+  const pickedId = data.lots.find((lot) => picked && lot.memberIds.includes(picked))?.id
+  const savedId = selected ? active.parkingSelections?.[selected.id] : undefined
+  const savedLotId = data.lots.find((lot) => savedId && lot.memberIds.includes(savedId))?.id
   useEffect(() => {
     if (!layers.parking) toggleLayer('parking')
     // enable the marker layer once on entering this screen
@@ -57,10 +60,10 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
   }, [])
   useEffect(() => {
     list.current?.querySelector('.is-selected')?.scrollIntoView({ block: 'nearest' })
-  }, [picked])
+  }, [pickedId])
   const rows = data.lots
     .filter(
-      (lot): lot is ParkingLot & { lat: number; lng: number } =>
+      (lot): lot is ParkingFacility & { lat: number; lng: number } =>
         lot.lat !== null && lot.lng !== null,
     )
     .map((lot) => ({
@@ -144,16 +147,16 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
             <PagedList
               key={`${base.label}${radius}${sort}${query}`}
               items={rows}
-              keep={rows.findIndex((row) => row.lot.id === picked)}
+              keep={rows.findIndex((row) => row.lot.id === pickedId)}
               render={({ lot, meters }) => (
                 <li
                   key={lot.id}
-                  className={`sn-parking-item ${picked === lot.id ? 'is-picked' : ''}`}
+                  className={`sn-parking-item ${pickedId === lot.id ? 'is-picked' : ''}`}
                 >
                   <button
                     type="button"
-                    className={`sn-parking-card ${picked === lot.id ? 'is-selected' : ''}`}
-                    aria-pressed={picked === lot.id}
+                    className={`sn-parking-card ${pickedId === lot.id ? 'is-selected' : ''}`}
+                    aria-pressed={pickedId === lot.id}
                     onClick={() => {
                       setPicked(lot.id)
                       window.dispatchEvent(
@@ -175,7 +178,7 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
                         {meters >= 1000 ? `${(meters / 1000).toFixed(1)}km` : `${meters}m`}
                       </span>
                       <span className="sn-place-facts">
-                        {selected && active.parkingSelections?.[selected.id] === lot.id && (
+                        {selected && savedLotId === lot.id && (
                           <StatusBadge tone="info">
                             <span className="sn-parking-confirmed">
                               <Icon name="check" />
@@ -310,10 +313,10 @@ export function SavedPanel({ go }: { go: (route: Route) => void }) {
                   type="button"
                   className="sn-saved-remove"
                   aria-label={`${saved.title} 저장 취소`}
+                  title="저장 취소"
                   onClick={() => removeSavedTrip(saved.id)}
                 >
                   <Icon name="bookmarkRemove" />
-                  저장 취소
                 </button>
               </li>
             ))}

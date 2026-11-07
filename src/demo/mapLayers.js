@@ -194,19 +194,21 @@ export function createMapLayers(
   let focusedParkingKey = ''
   function highlightParking(id) {
     highlightedParking = id
+    const location = layers.parking && id
+      ? PARKING_LOCATIONS.find((item) =>
+          item.records.some((record) => record.id === id || record.memberIds?.includes(id)),
+        )
+      : undefined
+    const record = location?.records.find((item) => item.id === id || item.memberIds?.includes(id))
+    const markerId = record?.id
     for (const [key, marker] of parkingItems) {
-      const individual = parkingMembers.get(key)?.size === 1 && parkingMembers.get(key)?.has(id)
+      const individual = parkingMembers.get(key)?.size === 1 && parkingMembers.get(key)?.has(markerId)
       const element = marker.getElement()
       element?.classList.remove('is-selected')
       element?.setAttribute('aria-pressed', 'false')
       if (element) element.style.visibility = individual ? 'hidden' : ''
       marker.setZIndexOffset(0)
     }
-    const location =
-      layers.parking && id
-        ? PARKING_LOCATIONS.find((item) => item.records.some((record) => record.id === id))
-        : undefined
-    const record = location?.records.find((item) => item.id === id)
     if (!location || !record) {
       focusedParkingMarker?.remove()
       focusedParkingMarker = null
@@ -246,7 +248,7 @@ export function createMapLayers(
     )
     focusedParkingMarker.on('click', () => {
       const current = PARKING_LOCATIONS.find((item) =>
-        item.records.some((item) => item.id === highlightedParking),
+        item.records.some((item) => item.id === record.id),
       )
       if (current) onRecord({ kind: 'parking', data: current }, [current.lat, current.lng])
     })

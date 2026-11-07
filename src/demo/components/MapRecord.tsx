@@ -62,24 +62,22 @@ export default function MapRecord({
         title={road.name || '도로명 미확인'}
         foot={
           <>
-            서울 TOPIS · {dateLabel(road.receivedAt)} 수신
+            서울 TOPIS{road.receivedAt ? ` · ${dateLabel(road.receivedAt)} 수신` : ''}
             <br />
             원천 측정 시각 {road.measurementTime ? dateLabel(road.measurementTime) : '미제공'}
           </>
         }
       >
-        <p className="map-record-sub">
-          {road.classes
-            .map((c) => kinds[c])
-            .filter(Boolean)
-            .join(' · ')}{' '}
-          · {road.direction}
-        </p>
+        {(road.classes.length > 0 || road.direction) && (
+          <p className="map-record-sub">
+            {[...road.classes.map((c) => kinds[c]), road.direction].filter(Boolean).join(' · ')}
+          </p>
+        )}
         <div className="map-record-metric">
-          <span>저장 당시 통행속도</span>
+          <span>{road.live ? '관측 통행속도' : '저장 당시 통행속도'}</span>
           <strong>
-            {number(road.speed)}
-            <small>km/h</small>
+            {road.speed === null ? '미확인' : number(road.speed)}
+            {road.speed !== null && <small>km/h</small>}
           </strong>
         </div>
         {road.travelSeconds != null && (
@@ -90,9 +88,7 @@ export default function MapRecord({
             </div>
           </dl>
         )}
-        <p className="map-record-note">
-          차량 대수가 아닌 속도 자료예요. 현재 교통 상황은 확인되지 않았어요.
-        </p>
+        {!road.live && <p className="map-record-note">저장된 교통 관측 자료예요.</p>}
       </Shell>
     )
   }
@@ -104,9 +100,11 @@ export default function MapRecord({
         title={population.name}
         foot={
           <>
-            서울 실시간 도시데이터
+            {record.data.live ? '서울 실시간 도시데이터' : '서울 도시데이터 · 저장 자료'}
             <br />
-            {dateLabel(population.observedAt)} 관측
+            {population.observedAt
+              ? `${dateLabel(population.observedAt)} 관측`
+              : '관측 시각 미확인'}
           </>
         }
       >
@@ -114,13 +112,24 @@ export default function MapRecord({
         <div className="map-record-metric population-metric">
           <span>관측 구역 내 추정 인구</span>
           <strong>
-            {number(population.min)}–{number(population.max)}
-            <small>명</small>
+            {population.min == null && population.max == null ? (
+              '인원 정보 없음'
+            ) : (
+              <>
+                {population.min != null &&
+                population.max != null &&
+                population.min !== population.max
+                  ? `${number(population.min)}–${number(population.max)}`
+                  : number(population.min ?? population.max)}
+                <small>명</small>
+              </>
+            )}
           </strong>
         </div>
         <p className="map-record-note">
-          관측 구역 전체의 보관 관측값이에요. 개별 인구의 위치나 세부 밀도를 뜻하지 않으며 추천
-          순위에는 반영하지 않아요.
+          {record.data.live
+            ? '관측 구역 전체의 추정 인구예요.'
+            : '관측 구역 전체의 보관 관측값이며 추천 순위에는 반영하지 않아요.'}
         </p>
       </Shell>
     )

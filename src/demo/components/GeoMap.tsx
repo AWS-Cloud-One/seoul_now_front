@@ -1,4 +1,6 @@
 import KakaoGeoMap from './KakaoGeoMap'
+import { routeTrafficColor } from '../routing/traffic'
+import { arrowHtml, endpointHtml, routeArrows } from '../routing/mapSymbols'
 import { SEOUL_VIEW_BOUNDS } from '../data/seoulBoundary'
 import markerIcons from '../data/icons.json'
 import { loadSeoulMapData } from '../data/seoulMapData'
@@ -16,7 +18,8 @@ import MapRecord from './MapRecord'
 import Icon from './Icon'
 import { PARKING_SELECT_EVENT, getMapOverlay, type MapOverlay } from './shell/useRoute'
 import { createLiveLayers } from '../live/liveLayers'
-import { selectLivePlace, startLive, useLive } from '../live/store'
+import { livePopulationRecord } from '../live/populationLabels'
+import { startLive, useLive } from '../live/store'
 /** On phones the bottom sheet covers the map, so keep markers above it. */
 function bottomPadding() {
   const sheet = document.querySelector<HTMLElement>('.sn-panel')
@@ -63,6 +66,7 @@ function LeafletGeoMap({
   const markers = useRef<Map<string, ReturnType<typeof L.marker>>>(new Map())
   const [status, setStatus] = useState('서울 지도를 불러오는 중이에요…')
   const [zoom, setZoom] = useState(12)
+  const [routing, setRouting] = useState(() => !!getMapOverlay().route?.length)
   const retryTiles = useRef<() => void>(() => {})
   const [popup, setPopup] = useState<{ record: RecordData; host: HTMLDivElement } | null>(null)
   const [parkingHint, setParkingHint] = useState(false)
@@ -134,17 +138,54 @@ function LeafletGeoMap({
         if (!instance.getPane('sn-route')) instance.createPane('sn-route').style.zIndex = '450'
         L.polyline(overlay.route, {
           pane: 'sn-route',
-          color: '#ffffff',
-          weight: 10,
-          opacity: 0.95,
+          color: '#294c3c',
+          weight: 15,
+          opacity: 1,
           interactive: false,
         }).addTo(group)
         const line = L.polyline(overlay.route, {
           pane: 'sn-route',
-          color: '#1d4ed8',
-          weight: 6,
-          opacity: 0.95,
+          color: routeTrafficColor(0),
+          weight: 11,
+          opacity: 1,
           interactive: false,
+        }).addTo(group)
+        for (const segment of overlay.routeSegments || []) {
+          if (segment.path.length > 1)
+            L.polyline(segment.path, {
+              pane: 'sn-route',
+              color: routeTrafficColor(segment.state),
+              weight: 11,
+              opacity: 1,
+              interactive: false,
+            }).addTo(group)
+        }
+        if (overlay.origin) {
+          const origin = overlay.origin
+          L.marker([origin.lat, origin.lon], {
+            icon: L.divIcon({
+              className: 'sn-route-endpoint-host',
+              html: endpointHtml('origin'),
+              iconSize: [40, 50],
+              iconAnchor: [20, 50],
+            }),
+            title: '출발 · ' + origin.name,
+            zIndexOffset: 1800,
+          }).addTo(group)
+        }
+        const destination = overlay.destination
+        const end = destination
+          ? ([destination.lat, destination.lng] as [number, number])
+          : overlay.route.at(-1)!
+        L.marker(end, {
+          icon: L.divIcon({
+            className: 'sn-route-endpoint-host',
+            html: endpointHtml('destination'),
+            iconSize: [40, 50],
+            iconAnchor: [20, 50],
+          }),
+          title: '도착 · ' + (destination?.name || '목적지'),
+          zIndexOffset: 1800,
         }).addTo(group)
         instance.fitBounds(line.getBounds(), {
           paddingTopLeft: [64, 84],
@@ -176,8 +217,11 @@ function LeafletGeoMap({
     const listener = (event: Event) => draw((event as CustomEvent<MapOverlay>).detail)
     window.addEventListener('sn:map-overlay', listener)
     draw(getMapOverlay())
-    const traffic = (event: Event) =>
-      liveLayers.current?.setTraffic((event as CustomEvent<MapOverlay>).detail.traffic)
+    const traffic = (event: Event) => {
+      const overlay = (event as CustomEvent<MapOverlay>).detail
+      setRouting(!!overlay.route?.length)
+      liveLayers.current?.setTraffic(overlay.route?.length ? null : overlay.traffic)
+    }
     window.addEventListener('sn:map-overlay', traffic)
     return () => {
       window.removeEventListener('sn:map-overlay', listener)
@@ -253,7 +297,9 @@ function LeafletGeoMap({
       tiles.redraw()
     }
     tiles.addTo(instance)
-    liveLayers.current = createLiveLayers(instance, { onSelect: selectLivePlace })
+    liveLayers.current = createLiveLayers(instance, {
+      onSelect: (place, point) => onRecord(livePopulationRecord(place), point),
+    })
     const stopLive = startLive()
     instance.on('moveend zoomend', onView)
     const resize = () => {
@@ -410,7 +456,7 @@ function LeafletGeoMap({
   useEffect(() => {
     if (live.selected) liveLayers.current?.focus(live.selected)
   }, [live.selected])
-  const roads = layers.roads,
+  const roads = layers.roads && !routing,
     parking = layers.parking,
     population = layers.population
   useEffect(() => {
@@ -485,6 +531,45 @@ function LeafletGeoMap({
     return () => window.removeEventListener(PARKING_SELECT_EVENT, highlight)
   }, [])
   const [locating, setLocating] = useState(false)
+  useEffect(() => {
+    const instance = map.current
+    if (!instance) return
+    if (!instance.getPane('sn-route-arrows'))
+      instance.createPane('sn-route-arrows').style.zIndex = '470'
+    const arrows = L.layerGroup().addTo(instance)
+    const update = () => {
+      arrows.clearLayers()
+      const path = getMapOverlay().route
+      if (!path?.length) return
+      const size = instance.getSize()
+      for (const mark of routeArrows(
+        path,
+        (point) => instance.latLngToContainerPoint(point),
+        size.x,
+        size.y,
+      )) {
+        L.marker([mark.lat, mark.lng], {
+          pane: 'sn-route-arrows',
+          interactive: false,
+          keyboard: false,
+          icon: L.divIcon({
+            className: 'sn-route-arrow-host',
+            html: arrowHtml(mark.angle),
+            iconSize: [10, 10],
+            iconAnchor: [5, 5],
+          }),
+        }).addTo(arrows)
+      }
+    }
+    instance.on('moveend zoomend resize', update)
+    window.addEventListener('sn:map-overlay', update)
+    update()
+    return () => {
+      instance.off('moveend zoomend resize', update)
+      window.removeEventListener('sn:map-overlay', update)
+      arrows.remove()
+    }
+  }, [])
   const myLocation = useRef<ReturnType<typeof L.layerGroup> | null>(null)
   function locateMe() {
     const instance = map.current

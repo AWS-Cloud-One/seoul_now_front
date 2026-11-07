@@ -1,0 +1,121 @@
+.sn-map-top {
+  left: 14px;
+  right: auto;
+  max-width: calc(100% - 82px);
+}
+.sn-map-layers {
+  min-width: 0;
+}
+.sn-layer-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sn-layer-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #dce4ed;
+  border-radius: 999px;
+  background: #fff;
+  color: #64748b;
+  box-shadow: 0 2px 8px #2036501a;
+  font: 600 13px var(--app-font);
+  cursor: pointer;
+}
+.sn-layer-toggle .icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.sn-layer-toggle[aria-pressed='true'] {
+  color: #176bea;
+  border-color: #176bea;
+  background: #edf5ff;
+}
+.sn-layer-toggle.is-population[aria-pressed='true'] {
+  color: #8652be;
+  border-color: #a47ad0;
+  background: #f8f1ff;
+}
+.sn-layer-toggle.is-roads[aria-pressed='true'] {
+  color: #ae671c;
+  border-color: #e0a764;
+  background: #fff8ed;
+}
+.sn-layer-toggle:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.sn-layer-toggle:focus-visible {
+  outline: 2px solid #176bea;
+  outline-offset: 3px;
+}
+.sn-population-status {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #fff;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+.sn-population-label-host {
+  background: transparent;
+  border: 0;
+}
+.sn-population-label {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  min-width: 126px;
+  max-width: 148px;
+  padding: 6px 10px;
+  border: 1px solid #dce4ed;
+  border-left: 4px solid var(--population-color, #98a2b3);
+  border-radius: 12px;
+  background: #fff;
+  color: #22354b;
+  box-shadow: 0 2px 8px #20365026;
+  text-align: center;
+  font-family: var(--app-font);
+  cursor: pointer;
+}
+.sn-population-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.sn-population-label strong {
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .sn-map-top {
+    top: 10px;
+    left: 10px;
+    right: auto;
+    max-width: calc(100% - 66px);
+  }
+  .sn-layer-toggle {
+    gap: 4px;
+    padding: 7px 9px;
+    font-size: 12px;
+  }
+  .sn-layer-buttons {
+    gap: 5px;
+  }
+  .sn-legend-mini {
+    top: auto;
+    bottom: 24px;
+    left: 10px;
+  }
+}
+.sn-kakao-map div:has(> .sn-population-heat) {
+  pointer-events: none;
+}

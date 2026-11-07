@@ -21,6 +21,7 @@ import {
   SecondaryButton,
 } from './ui'
 import { focusMap, FOOD_SELECT_EVENT, setMapOverlay } from './useRoute'
+import { ROUTE_TRAFFIC } from '../../routing/traffic'
 
 const ME = '__me__'
 /** Small stand-in mark (yellow tile + pin), not the official Kakao asset. */
@@ -77,11 +78,26 @@ function useLoader<T>(run: (signal: AbortSignal) => Promise<T>) {
   return [state, load, reset] as const
 }
 
-export function RouteSection({ place, departure }: { place: Target; departure: string | null }) {
+export function RouteSection({
+  place,
+  departure,
+  originOverride,
+}: {
+  place: Target
+  departure: string | null
+  originOverride?: Target | null
+}) {
   const [chosen, setChosen] = useState(departure && DEPARTURES[departure] ? departure : '')
   const [me, setMe] = useState<{ lat: number; lon: number } | null>(null)
   const [locating, setLocating] = useState<string | null>(null)
-  const origin = chosen === ME ? (me ?? undefined) : chosen ? DEPARTURES[chosen] : undefined
+  const origin =
+    originOverride !== undefined
+      ? originOverride
+      : chosen === ME
+        ? (me ?? undefined)
+        : chosen
+          ? DEPARTURES[chosen]
+          : undefined
   const [state, load, reset] = useLoader<RouteResult>((signal) =>
     fetchDirections(origin!, place, signal),
   )
@@ -110,24 +126,33 @@ export function RouteSection({ place, departure }: { place: Target; departure: s
     )
   }
   useEffect(() => {
-    setMapOverlay({ route: state.status === 'done' ? state.data.path : null })
-    return () => setMapOverlay({ route: null })
-  }, [state])
+    setMapOverlay({
+      route: state.status === 'done' ? state.data.path : null,
+      routeSegments: state.status === 'done' ? state.data.segments || [] : null,
+      origin:
+        state.status === 'done' && origin
+          ? { ...origin, name: originOverride?.name || (chosen === ME ? '내 위치' : chosen) }
+          : null,
+    })
+    return () => setMapOverlay({ route: null, routeSegments: null, origin: null })
+  }, [state, origin, originOverride?.name, chosen])
   return (
     <section className="sn-section" aria-labelledby="sn-route-title">
       <h3 id="sn-route-title">가는 길</h3>
-      <label className="sn-field">
-        출발지
-        <select value={chosen} onChange={(event) => choose(event.target.value)}>
-          <option value="">출발지를 선택해 주세요</option>
-          <option value={ME}>내 위치</option>
-          {Object.keys(DEPARTURES).map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </label>
+      {originOverride === undefined && (
+        <label className="sn-field">
+          출발지
+          <select value={chosen} onChange={(event) => choose(event.target.value)}>
+            <option value="">출발지를 선택해 주세요</option>
+            <option value={ME}>내 위치</option>
+            {Object.keys(DEPARTURES).map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {locating ? (
         <p className="sn-note" role="status">
           {locating}
@@ -165,6 +190,14 @@ export function RouteSection({ place, departure }: { place: Target; departure: s
           <p className="sn-note">
             지금 교통 상황 기준 추천 경로예요. 주차 시간과 도보 시간은 포함되지 않아요.
           </p>
+          <div className="sn-route-legend" aria-label="경로 교통 상태 색상">
+            {ROUTE_TRAFFIC.map((item) => (
+              <span key={item.state}>
+                <i style={{ background: item.color }} />
+                {item.label}
+              </span>
+            ))}
+          </div>
           <SecondaryButton className="is-compact" onClick={load}>
             <Icon name="refresh" />
             다시 조회

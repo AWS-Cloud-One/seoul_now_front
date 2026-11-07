@@ -10,7 +10,7 @@ export function useSelectedParking(placeId: string | null | undefined) {
   const { lots } = useParkingData('map')
   const place = placeById(placeId)
   const id = placeId ? active.parkingSelections?.[placeId] : undefined
-  const lot = lots.find((item) => item.id === id)
+  const lot = id ? lots.find((item) => item.memberIds.includes(id)) : undefined
   if (!place || !lot || lot.lat === null || lot.lng === null) return null
   const meters = Math.round(distanceMeters([place.lat, place.lon], [lot.lat, lot.lng]))
   return { lot, meters, minutes: estimatedWalkMinutes(meters) }

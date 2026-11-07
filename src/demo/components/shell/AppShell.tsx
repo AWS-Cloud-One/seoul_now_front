@@ -10,7 +10,7 @@ import DirectionsPanel from './DirectionsPanel'
 import RecommendPanel from './RecommendPanel'
 import { useRoute } from './useRoute'
 import { useVisualViewport } from './useVisualViewport'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, PointerEvent } from 'react'
 import type { Route } from './useRoute'
 
 const GeoMap = lazy(() => import('../GeoMap'))
@@ -55,7 +55,30 @@ export default function AppShell() {
   if (computed.wide !== layout.wide || computed.legendOpen !== layout.legendOpen)
     setLayout(computed)
   const [sheet, setSheet] = useState<Sheet>('half')
+  const sheetDrag = useRef<{
+    y: number
+    height: number
+    panel: HTMLElement
+    moved: boolean
+  } | null>(null)
+  const suppressSheetClick = useRef(false)
   const [chatMap, setChatMap] = useState(false)
+  const finishSheetDrag = (event: PointerEvent<HTMLButtonElement>, cancelled = false) => {
+    const current = sheetDrag.current
+    if (!current) return
+    sheetDrag.current = null
+    current.panel.style.removeProperty('height')
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    suppressSheetClick.current = current.moved
+    const delta = event.clientY - current.y
+    if (cancelled || Math.abs(delta) < 24) return
+    if (route === 'chat') setChatMap(delta > 0)
+    else
+      setSheet(
+        delta < 0 ? (sheet === 'peek' ? 'half' : 'full') : sheet === 'full' ? 'half' : 'peek',
+      )
+  }
   const displayedSheet = route === 'chat' && chatMap ? 'peek' : sheet
   const visibleViewport = useVisualViewport()
   const hasResult = !!result
@@ -157,23 +180,43 @@ export default function AppShell() {
             type="button"
             className="sn-sheet-handle"
             aria-label={sheet === 'full' ? '패널 낮추기' : '패널 높이기'}
-            onClick={() =>
-              route === 'chat'
-                ? setChatMap(true)
-                : setSheet(sheet === 'full' ? 'half' : sheet === 'half' ? 'full' : 'half')
-            }
+            onPointerDown={(event) => {
+              if (event.button !== 0) return
+              const panel = event.currentTarget.closest<HTMLElement>('.sn-panel')
+              if (!panel) return
+              suppressSheetClick.current = false
+              sheetDrag.current = {
+                y: event.clientY,
+                height: panel.getBoundingClientRect().height,
+                panel,
+                moved: false,
+              }
+              event.currentTarget.setPointerCapture?.(event.pointerId)
+            }}
+            onPointerMove={(event) => {
+              const current = sheetDrag.current
+              if (!current) return
+              const delta = event.clientY - current.y
+              if (Math.abs(delta) > 6) current.moved = true
+              if (!current.moved) return
+              const available =
+                current.panel.closest('.sn-app')?.getBoundingClientRect().height ||
+                window.innerHeight
+              current.panel.style.height = `${Math.max(56, Math.min(available - 120, current.height - delta))}px`
+            }}
+            onPointerUp={(event) => finishSheetDrag(event)}
+            onPointerCancel={(event) => finishSheetDrag(event, true)}
+            onLostPointerCapture={(event) => finishSheetDrag(event, true)}
+            onClick={() => {
+              if (suppressSheetClick.current) {
+                suppressSheetClick.current = false
+                return
+              }
+              if (route === 'chat') setChatMap(true)
+              else setSheet(sheet === 'full' ? 'half' : sheet === 'half' ? 'full' : 'half')
+            }}
           >
             <span />
-          </button>
-          <button
-            type="button"
-            className="sn-sheet-peek"
-            aria-label="패널 접기"
-            onClick={() =>
-              route === 'chat' ? setChatMap(true) : setSheet(sheet === 'peek' ? 'half' : 'peek')
-            }
-          >
-            <Icon name={sheet === 'peek' ? 'chevronUp' : 'chevronDown'} />
           </button>
           <div
             className="sn-resizer"

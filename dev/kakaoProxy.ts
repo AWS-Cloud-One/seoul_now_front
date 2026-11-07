@@ -37,7 +37,7 @@ export async function kakaoResponse(path: string, query: URLSearchParams, key: s
       routes?: {
         result_code: number
         summary: unknown
-        sections?: { roads?: { vertexes?: number[] }[] }[]
+        sections?: { roads?: { vertexes?: number[]; traffic_state?: number }[] }[]
       }[]
     }
     if (path.endsWith('/places')) return { status: 200, body: data }
@@ -45,13 +45,16 @@ export async function kakaoResponse(path: string, query: URLSearchParams, key: s
     if (!route || route.result_code !== 0)
       return { status: 404, body: { detail: '자동차 경로를 찾지 못했어요.' } }
     const coordinates: number[][] = []
+    const segments: { coordinates: number[][]; traffic_state: number }[] = []
     for (const section of route.sections || [])
       for (const road of section.roads || []) {
         const vertices = road.vertexes || []
-        for (let i = 0; i + 1 < vertices.length; i += 2)
-          coordinates.push([vertices[i], vertices[i + 1]])
+        const points: number[][] = []
+        for (let i = 0; i + 1 < vertices.length; i += 2) points.push([vertices[i], vertices[i + 1]])
+        coordinates.push(...points)
+        segments.push({ coordinates: points, traffic_state: road.traffic_state ?? 0 })
       }
-    return { status: 200, body: { summary: route.summary, coordinates } }
+    return { status: 200, body: { summary: route.summary, coordinates, segments } }
   } catch {
     return {
       status: 502,

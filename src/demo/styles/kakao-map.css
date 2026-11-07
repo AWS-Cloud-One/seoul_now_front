@@ -37,6 +37,21 @@
 .sn-kakao-place-pin.is-selected {
   background: #0754d9;
 }
+.sn-kakao-place-pin.sn-kakao-selected-parking {
+  border-radius: 50% 50% 50% 8px;
+  box-shadow: 0 0 0 3px #0754d94d, 0 3px 8px #1b5ec64d;
+}
+.sn-kakao-parking-count {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  min-width: 20px;
+  padding: 2px 4px;
+  border-radius: 999px;
+  background: #fff;
+  color: #0754d9;
+  font-size: 11px;
+}
 .sn-kakao-place-pin svg {
   width: 20px;
   height: 20px;
@@ -65,30 +80,140 @@
   display: block;
   padding: 4px 8px;
   background: #fff;
-  border: 2px solid #176bea;
+  border: 2px solid #16a36a;
   border-radius: 12px;
-  color: #1758aa;
+  color: #128356;
   font: 600 12px var(--app-font);
 }
+.sn-kakao-place-pin.sn-route-origin-pin {
+  background: #16a36a;
+  box-shadow: 0 3px 8px #12835640;
+}
+.demo-origin-marker > span {
+  background: #16a36a;
+  box-shadow:
+    0 0 0 6px #16a36a29,
+    0 1px 6px #12835640;
+}
+.real-map .demo-origin-label {
+  color: #128356;
+  border-color: #a1d9bd;
+}
+.sn-leaflet-route-origin,
+.sn-kakao-place-pin.sn-endpoint-pin {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #176bea;
+  box-shadow: none;
+  filter: drop-shadow(0 1px 2px #fff);
+}
+.sn-leaflet-route-origin,
+.sn-kakao-place-pin.sn-endpoint-pin.sn-route-origin-pin {
+  color: #16a36a;
+}
+.sn-leaflet-route-origin svg,
+.sn-kakao-place-pin.sn-endpoint-pin svg {
+  width: 32px;
+  height: 40px;
+}
+.sn-route-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: var(--sn-text-2);
+  font-size: 12px;
+  margin: 8px 0;
+}
+.sn-route-endpoint-host {
+  width: 40px;
+  height: 50px;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+.sn-route-endpoint {
+  --endpoint-color: #03bd5b;
+  --endpoint-border: #087f42;
+  display: block;
+  width: 40px;
+  height: 50px;
+  filter: drop-shadow(0 2px 2px #182b3459);
+}
+.sn-route-endpoint.is-destination {
+  --endpoint-color: #f34842;
+  --endpoint-border: #b8312c;
+}
+.sn-route-endpoint svg {
+  display: block;
+  width: 40px;
+  height: 50px;
+  overflow: visible;
+}
+.sn-route-endpoint path {
+  fill: var(--endpoint-color);
+  stroke: var(--endpoint-border);
+  stroke-width: 1.5;
+}
+.sn-route-endpoint text {
+  fill: #fff;
+  font: 700 12px var(--app-font);
+  letter-spacing: -0.6px;
+}
+.sn-route-arrow-host {
+  width: 10px;
+  height: 10px;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.sn-route-arrow {
+  display: block;
+  width: 10px;
+  height: 10px;
+  fill: #fff;
+  stroke: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform-origin: center;
+  overflow: visible;
+}
+.sn-route-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sn-route-legend i {
+  width: 14px;
+  height: 4px;
+  border-radius: 4px;
+}
+.sn-kakao-record-anchor {
+  white-space: normal;
+}
 .sn-kakao-record {
-  position: absolute;
-  z-index: 650;
-  top: 70px;
-  left: 16px;
-  width: 280px;
-  max-width: calc(100% - 80px);
+  position: relative;
+  width: 100%;
   padding: 18px;
   border: 1px solid #dce4ef;
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 4px 18px #19395933;
-  max-height: 70%;
+  max-height: var(--sn-popup-max-height, 360px);
   overflow-y: auto;
 }
 .sn-kakao-record-close {
   position: absolute;
-  right: 8px;
-  top: 8px;
+  right: 4px;
+  top: 4px;
+  width: 36px;
+  height: 36px;
   font-size: 24px;
   background: transparent;
   border: 0;

@@ -19,7 +19,32 @@
   .sn-app[data-open='false'] .sn-panel {
     position: absolute;
     transition: none;
-    height: min(46dvh, calc(100% - 120px - env(safe-area-inset-bottom)));
+    height: min(56dvh, calc(100% - 120px - env(safe-area-inset-bottom)));
+  }
+  .sn-sheet-handle {
+    height: 44px;
+    touch-action: none;
+    user-select: none;
+    cursor: ns-resize;
+  }
+  .sn-app[data-sheet='peek'] .sn-panel {
+    height: 56px;
+  }
+  .sn-scroll {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sn-sheet-handle span {
+    width: 72px;
+    height: 5px;
+    margin: 14px auto 0;
+    border-radius: 999px;
+  }
+  .sn-panel-inner {
+    padding-top: 40px;
+  }
+  .sn-panel-header {
+    padding-right: 16px;
   }
   .sn-app[data-sheet='full'] .sn-panel {
     height: calc(100% - 120px - env(safe-area-inset-bottom));

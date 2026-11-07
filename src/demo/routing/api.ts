@@ -1,8 +1,10 @@
 import { distanceMeters } from '../components/shell/useRoute'
+import type { RouteSegment } from './traffic'
 
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
 export type RouteResult = {
+  segments?: RouteSegment[]
   distance: number
   duration: number
   taxiFare: number | null
@@ -79,6 +81,7 @@ export function parseDirections(data: {
     fare?: { taxi?: number; toll?: number }
   }
   coordinates?: [number, number][]
+  segments?: { coordinates: [number, number][]; traffic_state?: number }[]
 }): RouteResult {
   const summary = data.summary
   if (typeof summary?.distance !== 'number' || typeof summary.duration !== 'number')
@@ -89,6 +92,10 @@ export function parseDirections(data: {
     taxiFare: summary.fare?.taxi ?? null,
     tollFare: summary.fare?.toll ?? null,
     path: (data.coordinates || []).map(([lng, lat]) => [lat, lng]),
+    segments: (data.segments || []).map((segment) => ({
+      path: segment.coordinates.map(([lng, lat]) => [lat, lng] as [number, number]),
+      state: segment.traffic_state ?? 0,
+    })),
   }
 }
 

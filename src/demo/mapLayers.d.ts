@@ -1,6 +1,9 @@
 import type L from './vendor/leaflet.js'
 import type { Layers, Result } from './types'
 export type RoadRecord = {
+  lat?: number
+  lng?: number
+  live?: boolean
   name: string
   speed: number | null
   classes: string[]
@@ -12,6 +15,9 @@ export type RoadRecord = {
 export type ParkingRecord = import('./parking/types').ParkingLot
 export type ParkingLocation = { lat: number; lng: number; records: ParkingRecord[] }
 export type PopulationRecord = {
+  live?: boolean
+  lat?: number
+  lng?: number
   properties: {
     name: string
     min: number | null
