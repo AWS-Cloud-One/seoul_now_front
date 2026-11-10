@@ -1,4 +1,5 @@
 import { placeById, validateConditions } from './domain.js'
+import { normalizeResult } from './apiState'
 import type { SavedTrip } from './types'
 
 export const SAVED_TRIPS_KEY = 'seoul-saved-trips-v1'
@@ -30,7 +31,7 @@ function validSavedTrip(value: unknown): value is SavedTrip {
         (entry) =>
           !!entry &&
           typeof entry.id === 'string' &&
-          !!placeById(entry.id) &&
+          !!placeById(entry.id, result) &&
           (entry.eta === null || Number.isFinite(entry.eta)) &&
           typeof entry.reason === 'string' &&
           typeof entry.sourceStatus === 'string' &&
@@ -45,7 +46,14 @@ export function loadSavedTrips(): SavedTrip[] {
   try {
     const stored = JSON.parse(localStorage.getItem(SAVED_TRIPS_KEY) || 'null')
     if (stored?.schema !== 1 || !Array.isArray(stored.items)) return []
-    return stored.items.filter(validSavedTrip)
+    return stored.items.flatMap((item: SavedTrip) => {
+      try {
+        const normalized = { ...item, result: normalizeResult(item.result) }
+        return validSavedTrip(normalized) ? [normalized] : []
+      } catch {
+        return []
+      }
+    })
   } catch {
     return []
   }

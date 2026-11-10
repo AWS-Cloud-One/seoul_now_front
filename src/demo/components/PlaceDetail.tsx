@@ -5,7 +5,7 @@ import Icon from './Icon'
 export default function PlaceDetail() {
   const { active, result, ui, patchUI, showChat, exclude } = useDemo()
   const detail = ui.detail
-  const place = placeById(detail?.id)
+  const place = placeById(detail?.id, result)
   const entry = result?.entries.find((e) => e.id === detail?.id)
   if (!detail || !place || !entry || !result || detail.resultId !== result.id) return null
   const number = result.entries.findIndex((e) => e.id === entry.id) + 1
@@ -159,7 +159,11 @@ export default function PlaceDetail() {
                 <dt>주차 탐색 범위</dt>
                 <dd>
                   직선 반경{' '}
-                  {unknown || place.parkingRadius === 1000 ? '1km' : `${place.parkingRadius}m`}
+                  {place.parkingRadius === null
+                    ? '미확인'
+                    : unknown || place.parkingRadius === 1000
+                      ? '1km'
+                      : `${place.parkingRadius}m`}
                   {unknown ? '까지 조회 · 정보 확인 불가' : '에서 첫 결과 확인'}
                 </dd>
               </div>

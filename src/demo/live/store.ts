@@ -1,8 +1,16 @@
 import { SEOUL_BOUNDARY } from '../data/seoulBoundary'
-import { loadSeoulMapData } from '../data/seoulMapData'
+import { mapLayer } from '../../api/mapLayers'
+import {
+  queryApi,
+  SEOUL_QUERY,
+  type MapGeometry,
+  type MapStatus,
+  type MapQuery,
+  type AreaOverview,
+  type PopulationValue,
+} from '../../api/queries'
+import type { Information } from '../../api/contracts'
 import { useSyncExternalStore } from 'react'
-
-const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
 export const LEVELS = ['여유', '보통', '약간 붐빔', '붐빔'] as const
 export type Level = (typeof LEVELS)[number] | '정보 없음'
@@ -15,6 +23,8 @@ export const LEVEL_COLORS: Record<Level, string> = {
 }
 export type LivePlace = {
   saved?: boolean
+  information?: Information<PopulationValue>
+  polygons?: [number, number][][][]
   code: string
   name: string
   category: string
@@ -116,80 +126,91 @@ export function parseBoundary(data: { features?: Feature[] }): [number, number][
   return rings
 }
 
-async function getJson(path: string, signal?: AbortSignal) {
-  const response = await fetch(`${BASE}${path}`, { signal })
-  if (!response.ok) throw new Error('서울 도시데이터를 불러오지 못했어요.')
-  return response.json()
+export function parseMapPopulation(geometry: MapGeometry, status: MapStatus): LivePlace[] {
+  const statuses = new Map(status.items.map((item) => [item.area_code, item.population]))
+  const labels = {
+    relaxed: '여유',
+    normal: '보통',
+    slightly_crowded: '약간 붐빔',
+    crowded: '붐빔',
+  } as const
+  return geometry.feature_collection.features.flatMap((feature) => {
+    const g = feature.geometry
+    if (g.type !== 'Polygon' && g.type !== 'MultiPolygon') return []
+    const polygons = (g.type === 'Polygon' ? [g.coordinates] : g.coordinates).map((polygon) =>
+      polygon.map(swap),
+    )
+    const ring = polygons[0]?.[0]
+    if (!ring?.length) return []
+    const information = statuses.get(feature.id)
+    const value = information?.status === 'available' ? information.value : null
+    const stale = !value || information?.freshness !== 'fresh' || value.is_replacement === true
+    const points = polygons.flatMap((p) => p[0] || [])
+    return [
+      {
+        code: feature.id,
+        name: feature.properties.name || feature.id,
+        category: '인구 관측 구역',
+        lat: (Math.min(...points.map((p) => p[0])) + Math.max(...points.map((p) => p[0]))) / 2,
+        lng: (Math.min(...points.map((p) => p[1])) + Math.max(...points.map((p) => p[1]))) / 2,
+        level: stale || !value?.congestion ? ('정보 없음' as const) : labels[value.congestion],
+        stale,
+        populationMin: stale ? null : value.min_people,
+        populationMax: stale ? null : value.max_people,
+        sourceTime: information?.observed_at || information?.collected_at || null,
+        ring,
+        polygons,
+        information,
+      },
+    ]
+  })
 }
-let boundaryRequested = false
 let timer: ReturnType<typeof setInterval> | undefined
 let users = 0
-async function loadSavedPopulation() {
-  if (state.savedPlaces.length) return
-  try {
-    const { population } = await loadSeoulMapData()
-    const features = (population.features as Feature[]).map(({ geometry, properties: p }) => ({
-      geometry,
-      properties: {
-        ...p,
-        area_code: p.id,
-        population_min: p.min,
-        population_max: p.max,
-        source_time: p.observedAt,
-        replacement: p.replaced,
-        status: 'recent',
-      },
-    }))
-    set({ savedPlaces: parsePlaces({ features }).map((place) => ({ ...place, saved: true })) })
-  } catch {
-    // A later refresh can retry the saved file.
-  }
-}
-
+let request: AbortController | null = null
 async function refresh() {
+  request?.abort()
+  const controller = new AbortController()
+  request = controller
   try {
-    const data = await getJson('/map/population/geometry')
-    const places = parsePlaces(data)
-    set({ places, status: 'ready', error: null })
-    if (!places.some((place) => !place.stale)) void loadSavedPopulation()
+    const { geometry, status } = await mapLayer('population', SEOUL_QUERY, controller.signal)
+    if (!controller.signal.aborted)
+      set({ places: parseMapPopulation(geometry, status), status: 'ready', error: null })
   } catch (error) {
-    void loadSavedPopulation()
-    set({
-      status: state.places.length ? 'ready' : 'error',
-      error: (error as Error).message,
-    })
+    if (!controller.signal.aborted)
+      set({
+        status: state.places.length ? 'ready' : 'error',
+        error: error instanceof Error ? error.message : '인구 관측 자료를 조회하지 못했어요.',
+        places: state.places.map((place) => ({
+          ...place,
+          stale: true,
+          level: '정보 없음',
+          populationMin: null,
+          populationMax: null,
+        })),
+      })
   }
 }
-async function loadBoundary() {
-  if (boundaryRequested) return
-  boundaryRequested = true
-  try {
-    const boundary = parseBoundary(await getJson('/map/areas'))
-    set({ boundary: boundary.length ? boundary : SEOUL_BOUNDARY })
-  } catch {
-    boundaryRequested = false
-  }
-}
-/** Starts polling while at least one component uses the live data. */
 export function startLive() {
-  users += 1
+  users++
   if (users === 1) {
     if (state.status !== 'ready') set({ status: 'loading' })
     void refresh()
-    void loadBoundary()
     timer = setInterval(() => {
       if (!document.hidden) void refresh()
     }, 60000)
   }
   return () => {
-    users -= 1
-    if (users === 0) clearInterval(timer)
+    users--
+    if (users === 0) {
+      clearInterval(timer)
+      request?.abort()
+    }
   }
 }
 export const retryLive = () => {
   set({ status: 'loading' })
   void refresh()
-  void loadBoundary()
 }
 
 export type RoadSegment = {
@@ -199,58 +220,45 @@ export type RoadSegment = {
   path: [number, number][]
 }
 export type MapRoadSegment = import('../mapLayers').RoadRecord & {
+  id: string
   path: [number, number][]
 }
 
-export async function fetchRoadTraffic(signal: AbortSignal): Promise<MapRoadSegment[]> {
-  const data: {
-    features?: {
-      id?: string
-      geometry?: { type: string; coordinates: [number, number][] }
-      properties?: {
-        road_name?: string
-        speed_kmh?: unknown
-        travel_time_seconds?: unknown
-        traffic_collected_at?: string
-        provider_observed_at?: string
-      }
-    }[]
-  } = await getJson('/traffic/network?limit=10000', signal).catch((error) => {
-    if (signal.aborted) throw error
-    return {}
+export async function fetchRoadTraffic(
+  signal: AbortSignal,
+  query: MapQuery = SEOUL_QUERY,
+): Promise<MapRoadSegment[]> {
+  const { geometry, status } = await mapLayer('roads', query, signal)
+  const byId = new Map(status.items.map((item) => [item.link_id, item.traffic]))
+  return geometry.feature_collection.features.flatMap((feature) => {
+    const g = feature.geometry,
+      info = byId.get(feature.id)
+    const lines =
+      g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : []
+    return lines.map((line) => ({
+      id: feature.id,
+      information: info,
+      name: feature.properties.name || '도로명 미확인',
+      speed:
+        info?.status === 'available' && info.freshness !== 'stale'
+          ? (info.value?.speed_kmh ?? null)
+          : null,
+      travelSeconds:
+        info?.status === 'available' && info.freshness !== 'stale'
+          ? (info.value?.travel_seconds ?? null)
+          : null,
+      receivedAt: info?.collected_at || '',
+      measurementTime: info?.observed_at || null,
+      live: true,
+      classes: [],
+      direction: feature.properties.direction || '',
+      path: swap(line),
+    }))
   })
-  const { roads } = await loadSeoulMapData()
-  const saved = roads as (MapRoadSegment & {
-    id: string
-    geometryLengthReviewNeeded?: boolean
-    mappingReviewNeeded?: boolean
-  })[]
-  const names = new Map(saved.map((road) => [road.id, road.name]))
-  const observed = (data.features || []).flatMap(({ id, geometry, properties }) => {
-    if (geometry?.type !== 'LineString') return []
-    const path = geometry.coordinates
-      .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat))
-      .map(([lng, lat]): [number, number] => [lat, lng])
-    if (path.length < 2) return []
-    return [
-      {
-        name: properties?.road_name || names.get(id || '') || '도로명 미확인',
-        speed: num(properties?.speed_kmh),
-        live: true,
-        classes: [],
-        direction: '',
-        travelSeconds: num(properties?.travel_time_seconds),
-        receivedAt: properties?.traffic_collected_at || '',
-        measurementTime: properties?.provider_observed_at || null,
-        path,
-      },
-    ]
-  })
-  return observed.some((road) => road.speed !== null)
-    ? observed
-    : saved.filter((road) => !road.geometryLengthReviewNeeded && !road.mappingReviewNeeded)
 }
 export type LiveDetail = {
+  information?: AreaOverview
+
   name: string
   road: {
     level: string | null
@@ -271,7 +279,7 @@ export type LiveDetail = {
     }[]
   }
   parking: {
-    total: number
+    total: number | null
     lots: { name: string; capacity: number | null; available: number | null; fee: string | null }[]
   }
   weather: { temp: string | null; air: string | null; rain: string | null } | null
@@ -335,5 +343,47 @@ export function parseDetail(payload: { data?: Raw; area_name?: string }): LiveDe
   }
 }
 export async function fetchLiveDetail(code: string, signal: AbortSignal): Promise<LiveDetail> {
-  return parseDetail(await getJson(`/citydata/areas/${encodeURIComponent(code)}`, signal))
+  const info = await queryApi<AreaOverview>(
+    `/locations/areas/${encodeURIComponent(code)}/overview`,
+    { include_extras: true },
+    signal,
+  )
+  const commerce = info.commerce.status === 'available' ? info.commerce.value : null
+  const weather = info.weather.status === 'available' ? info.weather.value : null
+  return {
+    name: info.name,
+    information: info,
+    road: {
+      level: null,
+      speed: null,
+      message: '이 관측 구역에 연결된 도로별 관측값이에요.',
+      time: info.checked_at,
+      segments: [],
+    },
+    commerce: {
+      level: txt(commerce?.level),
+      time: info.commerce.observed_at,
+      payments: num(commerce?.payment_count),
+      categories: arr(commerce?.categories).map((c) => ({
+        name: txt(c.middle_category) || '',
+        group: txt(c.large_category) || '',
+        stores: num(c.merchant_count),
+        level: txt(c.level),
+      })),
+    },
+    parking: {
+      total:
+        info.parking.status === 'available'
+          ? (info.parking.value?.registered_facility_count ?? null)
+          : null,
+      lots: [],
+    },
+    weather: weather
+      ? {
+          temp: txt(weather.temperature_celsius),
+          air: txt(weather.air_grade),
+          rain: txt(weather.precipitation_message),
+        }
+      : null,
+  }
 }

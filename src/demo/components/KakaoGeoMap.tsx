@@ -1,3 +1,6 @@
+import type { MapRoadSegment } from '../live/store'
+import { useRoadTraffic } from '../live/useRoadTraffic'
+import { SEOUL_QUERY, type MapQuery } from '../../api/queries'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { loadKakaoSdk } from '../kakaoSdk'
@@ -5,7 +8,7 @@ import { useDemo } from '../useDemo'
 import { useParkingData } from '../parking/useParkingData'
 import { DEPARTURES, placeById } from '../domain.js'
 import { SEOUL_VIEW_BOUNDS } from '../data/seoulBoundary'
-import { fetchRoadTraffic, useLive, startLive, type MapRoadSegment } from '../live/store'
+import { useLive, startLive } from '../live/store'
 import {
   getMapOverlay,
   MAP_OVERLAY_EVENT,
@@ -52,11 +55,14 @@ export default function KakaoGeoMap({
   parkingHintRequested?: boolean
 }) {
   const { active, result, layers, patchUI, selectPlace, saveMap, notify } = useDemo()
+  const selectedLatitude = placeById(active.selected, result)?.lat
+  const selectedLongitude = placeById(active.selected, result)?.lon
   const parking = useParkingData('map')
   const live = useLive()
-  const populationPlaces = live.places.some((place) => !place.stale) || !live.savedPlaces.length
-    ? live.places
-    : live.savedPlaces
+  const populationPlaces =
+    live.places.some((place) => !place.stale) || !live.savedPlaces.length
+      ? live.places
+      : live.savedPlaces
   const root = useRef<HTMLDivElement>(null)
   const instance = useRef<kakao.maps.Map | null>(null)
   const [ready, setReady] = useState(false)
@@ -65,9 +71,14 @@ export default function KakaoGeoMap({
   const [tick, setTick] = useState(0)
   const updateRoads = useRef<(() => void) | null>(null)
   const [overlay, setOverlay] = useState<MapOverlay>(getMapOverlay)
-  const [cityTraffic, setCityTraffic] = useState<MapRoadSegment[]>([])
+  const [viewport, setViewport] = useState<MapQuery>(SEOUL_QUERY)
   const findRoad = useRef<((point: kakao.maps.LatLng) => MapRoadSegment | undefined) | null>(null)
   const showRoadTraffic = layers.roads && !overlay.route?.length
+  const needsRoadTraffic = layers.roads || !!overlay.route?.length
+  const { roads: cityTraffic, error: roadError } = useRoadTraffic(
+    viewport,
+    ready && needsRoadTraffic,
+  )
   const [focused, setFocused] = useState<string | null>(
     active.parkingSelections?.[active.selected || ''] || null,
   )
@@ -127,6 +138,9 @@ export default function KakaoGeoMap({
       popupHost.setAttribute('data-side', onTop ? 'above' : 'below')
     }
     const close = () => setRecord(null)
+    const dismissOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !popupHost.contains(event.target)) close()
+    }
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close()
     }
@@ -139,6 +153,7 @@ export default function KakaoGeoMap({
     kakao.maps.event.addListener(map, 'zoom_changed', placePopup)
     kakao.maps.event.addListener(map, 'idle', placePopup)
     window.addEventListener('keydown', keyboard)
+    document.addEventListener('pointerdown', dismissOutside, true)
     placePopup()
     return () => {
       observer.disconnect()
@@ -147,6 +162,7 @@ export default function KakaoGeoMap({
       kakao.maps.event.removeListener(map, 'zoom_changed', placePopup)
       kakao.maps.event.removeListener(map, 'idle', placePopup)
       window.removeEventListener('keydown', keyboard)
+      document.removeEventListener('pointerdown', dismissOutside, true)
     }
   }, [ready, record, popupHost, layers.population, showRoadTraffic])
   useEffect(() => {
@@ -161,7 +177,15 @@ export default function KakaoGeoMap({
         return
       }
       const place = layers.population
-        ? [...populationPlaces].reverse().find((area) => containsPopulationPoint(area.ring, lat, lng))
+        ? [...populationPlaces]
+            .reverse()
+            .find((area) =>
+              (area.polygons || [[area.ring]]).some(
+                (rings) =>
+                  containsPopulationPoint(rings[0], lat, lng) &&
+                  !rings.slice(1).some((ring) => containsPopulationPoint(ring, lat, lng)),
+              ),
+            )
         : undefined
       setRecord(place ? livePopulationRecord(place, lat, lng) : null)
     }
@@ -172,6 +196,17 @@ export default function KakaoGeoMap({
     const map = instance.current
     if (!map) return
     const center = map.getCenter()
+    const bounds = map.getBounds(),
+      sw = bounds.getSouthWest(),
+      ne = bounds.getNorthEast()
+    const query: MapQuery = {
+      bbox: [sw.getLng(), sw.getLat(), ne.getLng(), ne.getLat()].map((v) =>
+        Number(v.toFixed(5)),
+      ) as MapQuery['bbox'],
+      level: map.getLevel(),
+    }
+    setViewport((old) => (JSON.stringify(old) === JSON.stringify(query) ? old : query))
+    parking.setViewport(query)
     const zoom = 20 - map.getLevel()
     saveMap({
       center: [center.getLat(), center.getLng()],
@@ -194,7 +229,10 @@ export default function KakaoGeoMap({
     loadKakaoSdk(import.meta.env.VITE_KAKAO_MAP_APP_KEY!.trim())
       .then(() => {
         if (cancelled || !root.current) return
-        map = new kakao.maps.Map(root.current, { center: position(37.5665, 126.978), level: 9 })
+        map = new kakao.maps.Map(root.current, {
+          center: position(37.5665, 126.978),
+          level: 9,
+        })
         map.setMaxLevel(matchMedia('(max-width:900px)').matches ? 10 : 9)
         map.setMinLevel(1)
         instance.current = map
@@ -228,31 +266,16 @@ export default function KakaoGeoMap({
     return stop
   }, [])
   useEffect(() => {
-    if (!ready || !showRoadTraffic) return
-    const controller = new AbortController()
-    const refresh = async () => {
-      try {
-        const roads = await fetchRoadTraffic(controller.signal)
-        if (!controller.signal.aborted) setCityTraffic(roads)
-      } catch {
-        // Retain the last successful observation if a refresh fails.
-      }
-    }
-    void refresh()
-    const timer = window.setInterval(refresh, 60_000)
-    return () => {
-      controller.abort()
-      window.clearInterval(timer)
-    }
-  }, [ready, showRoadTraffic])
-  useEffect(() => {
     if (!ready || !instance.current || !active.selected) return
-    const place = placeById(active.selected)
+    const place =
+      selectedLatitude === undefined || selectedLongitude === undefined
+        ? null
+        : { lat: selectedLatitude, lon: selectedLongitude }
     if (place) {
       instance.current.setLevel(4)
       instance.current.panTo(position(place.lat, place.lon))
     }
-  }, [ready, active.selected])
+  }, [ready, active.selected, selectedLatitude, selectedLongitude])
   useEffect(() => {
     if (!ready || !instance.current || !live.selected) return
     const place = live.places.find((item) => item.code === live.selected)
@@ -386,7 +409,8 @@ export default function KakaoGeoMap({
         loadedZoom = zoom
         const paths = new Map<string, kakao.maps.LatLng[][]>()
         visibleRoads = roads.filter(
-          (road) => road.north >= south && road.south <= north && road.east >= west && road.west <= east,
+          (road) =>
+            road.north >= south && road.south <= north && road.east >= west && road.west <= east,
         )
         for (const road of visibleRoads) {
           if (!paths.has(road.color)) paths.set(road.color, [])
@@ -519,7 +543,7 @@ export default function KakaoGeoMap({
       overlay.route.forEach((p) => bounds.extend(position(...p)))
       instance.current.setBounds(bounds, 70, 60, 180, 60)
     }
-  }, [ready, overlay.route])
+  }, [ready, overlay.route, overlay.routeSegments?.length])
   useEffect(() => {
     const map = instance.current
     if (!ready || !map) return
@@ -553,8 +577,14 @@ export default function KakaoGeoMap({
       button.onclick = click
       return button
     }
-    const departure =
-      !preview && result?.conditions.departure ? DEPARTURES[result.conditions.departure] : null
+    const coordinates = result?.conditions.origin?.coordinates
+    const departure = preview
+      ? null
+      : coordinates
+        ? { lat: coordinates.latitude, lon: coordinates.longitude }
+        : result?.conditions.departure
+          ? DEPARTURES[result.conditions.departure]
+          : null
     const endpoint = (kind: 'origin' | 'destination', name: string) => {
       const node = document.createElement('div')
       node.className = 'sn-route-endpoint-host'
@@ -580,7 +610,7 @@ export default function KakaoGeoMap({
       const node = endpoint('destination', destination.name)
       add(destination.lat, destination.lng, node, 55, 1)
     }
-    if (overlay.route?.length && root.current) {
+    if (overlay.route?.length && (overlay.routeSegments?.length || 0) <= 1 && root.current) {
       const projection = map.getProjection()
       for (const mark of routeArrows(
         overlay.route,
@@ -597,7 +627,7 @@ export default function KakaoGeoMap({
     }
     if (!preview)
       for (const entry of result?.entries || []) {
-        const place = placeById(entry.id)
+        const place = placeById(entry.id, result)
         if (!place) continue
         const icons: Record<string, keyof typeof markerIcons> = {
           카페: 'coffee',
@@ -613,7 +643,8 @@ export default function KakaoGeoMap({
         )
         node.onmouseenter = () => patchUI({ hover: place.id })
         node.onmouseleave = () => patchUI({ hover: null })
-        add(place.lat, place.lon, node, 40, 1)
+        node.setAttribute('data-map-place', place.id)
+        add(place.lat, place.lon, node, active.selected === place.id ? 80 : 40, 1)
       }
     if (layers.parking) {
       const bounds = map.getBounds(),
@@ -683,7 +714,10 @@ export default function KakaoGeoMap({
           } else {
             const lot = group[0]
             window.dispatchEvent(new CustomEvent(PARKING_SELECT_EVENT, { detail: { id: lot.id } }))
-            setRecord({ kind: 'parking', data: { lat: lot.lat!, lng: lot.lng!, records: [lot] } })
+            setRecord({
+              kind: 'parking',
+              data: { lat: lot.lat!, lng: lot.lng!, records: [lot] },
+            })
           }
         }
         add(lat, lng, button)
@@ -696,12 +730,19 @@ export default function KakaoGeoMap({
           'car',
           () => {
             if (choices.length > 1) openChoices(choices)
-            else setRecord({ kind: 'parking', data: { lat: lot.lat!, lng: lot.lng!, records: [lot] } })
+            else
+              setRecord({
+                kind: 'parking',
+                data: { lat: lot.lat!, lng: lot.lng!, records: [lot] },
+              })
           },
           true,
         )
         node.classList.add('sn-kakao-selected-parking')
-        node.setAttribute('aria-label', `선택한 주차장 ${lot.name}${choices.length > 1 ? `, 가까운 위치 ${choices.length}곳` : ''}`)
+        node.setAttribute(
+          'aria-label',
+          `선택한 주차장 ${lot.name}${choices.length > 1 ? `, 가까운 위치 ${choices.length}곳` : ''}`,
+        )
         if (choices.length > 1) {
           const count = document.createElement('b')
           count.className = 'sn-kakao-parking-count'
@@ -739,6 +780,7 @@ export default function KakaoGeoMap({
     overlay.destination,
     overlay.origin,
     overlay.route,
+    overlay.routeSegments?.length,
     patchUI,
     selectPlace,
   ])
@@ -785,6 +827,27 @@ export default function KakaoGeoMap({
           <Icon name="fit" />
         </button>
       </div>
+      {((needsRoadTraffic && roadError) ||
+        (layers.parking && parking.error) ||
+        (layers.population && live.error)) && (
+        <p
+          className="sn-banner"
+          role="status"
+          style={{
+            position: 'absolute',
+            bottom: 24,
+            left: 20,
+            zIndex: 20,
+            maxWidth: 320,
+          }}
+        >
+          {needsRoadTraffic && roadError
+            ? `도로: ${roadError}`
+            : layers.parking && parking.error
+              ? `주차 위치: ${parking.error} 지도를 확대해 주세요.`
+              : `인구: ${live.error}`}
+        </p>
+      )}
       {error && (
         <div className="sn-kakao-error" role="alert">
           <p>{error}</p>
@@ -831,9 +894,11 @@ export default function KakaoGeoMap({
               parkingError={parking.error}
               onSelectParking={(next) => {
                 if (next.kind === 'parking' && next.data.records[0]) {
-                  window.dispatchEvent(new CustomEvent(PARKING_SELECT_EVENT, {
-                    detail: { id: next.data.records[0].id },
-                  }))
+                  window.dispatchEvent(
+                    new CustomEvent(PARKING_SELECT_EVENT, {
+                      detail: { id: next.data.records[0].id },
+                    }),
+                  )
                 }
                 setRecord(next)
               }}

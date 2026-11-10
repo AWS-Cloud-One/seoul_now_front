@@ -141,10 +141,10 @@ function TripRename({ tripId }: { tripId: string }) {
   )
 }
 function Navigation({ placeId }: { placeId: string }) {
-  const { notify, closePanel } = useDemo()
+  const { notify, closePanel, result } = useDemo()
   const [failed, setFailed] = useState(false)
   const text = useRef<HTMLTextAreaElement>(null)
-  const place = placeById(placeId)!
+  const place = placeById(placeId, result)!
   const destination = `${place.name}\n${place.id}\n위도 ${place.lat.toFixed(6)}, 경도 ${place.lon.toFixed(6)}\n가상 목적지 · 실제 길찾기 사용 금지`
   async function copy() {
     try {
@@ -227,7 +227,7 @@ function History({ tripId }: { tripId: string }) {
               <ul>
                 {group.entries.map((entry) => (
                   <li key={entry.id}>
-                    {placeById(entry.id)?.name} ·{' '}
+                    {placeById(entry.id, group)?.name} ·{' '}
                     {entry.eta == null ? '시간 미확인' : `${entry.eta}분`}
                   </li>
                 ))}
@@ -254,7 +254,7 @@ function History({ tripId }: { tripId: string }) {
   )
 }
 export default function Dialog() {
-  const { active, store, ui, search, closePanel, deleteTrip } = useDemo()
+  const { active, store, ui, submitRecommendation, closePanel, deleteTrip } = useDemo()
   const panel = ui.panel
   if (!panel) return null
   let body: ReactNode
@@ -265,13 +265,13 @@ export default function Dialog() {
       <Shell title="조건을 조금 바꿔볼까요?" subtitle="적용하기 전까지 현재 추천은 그대로예요.">
         <ConditionsForm
           initial={
-            active.pendingChat
+            !active.api && active.pendingChat
               ? patchConditions(active.conditions, active.pendingChat.patch)
               : active.conditions
           }
           onSubmit={(conditions) => {
             closePanel()
-            void search(conditions)
+            void submitRecommendation(conditions)
           }}
         />
       </Shell>

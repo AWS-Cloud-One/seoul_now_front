@@ -1,16 +1,18 @@
+import ApiPlaceDetail from './ApiPlaceDetail'
+import ResultContextNotice from '../ResultContextNotice'
+import { resultContextStatus, displayConditions } from '../../apiState'
+import { conditionsEqual } from '../../domain.js'
 import { useSelectedParking } from '../../parking/useSelectedParking'
-import {
-  conditionText,
-  dateLabel,
-  DEPARTURES,
-  placeById,
-  validateConditions,
-} from '../../domain.js'
+import { conditionText, dateLabel, DEPARTURES, placeById } from '../../domain.js'
 import { PanelTabs } from './ChatPanel'
 import { fitMap, focusMap } from './useRoute'
 import { useDemo } from '../../useDemo'
 import type { Entry, Place } from '../../types'
 import ConditionsForm from '../ConditionsForm'
+import RecommendationFeedback from '../RecommendationFeedback'
+import ResponsePending from '../ResponsePending'
+import { validateRecommendation } from '../../recommendationConditions'
+import { useSecondsRemaining } from '../../useSecondsRemaining'
 import Icon from '../Icon'
 import {
   EmptyState,
@@ -52,7 +54,14 @@ function PlaceCard({
 }) {
   const { selectPlace, openDetail, patchUI, ui, result } = useDemo()
   const departure = result?.conditions.departure
-  const origin = departure ? DEPARTURES[departure] : undefined
+  const origin = result?.conditions.origin
+    ? {
+        lat: result.conditions.origin.coordinates.latitude,
+        lon: result.conditions.origin.coordinates.longitude,
+      }
+    : departure
+      ? DEPARTURES[departure]
+      : undefined
   const parking = useSelectedParking(place.id)
   return (
     <li>
@@ -76,7 +85,7 @@ function PlaceCard({
           <span className="sn-place-body">
             <span className="sn-place-heading">
               <span className="sn-rank" aria-hidden="true">
-                {index + 1}
+                {result?.api?.result.cards[index]?.rank === null ? '·' : index + 1}
               </span>
               <strong>{place.name}</strong>
             </span>
@@ -153,7 +162,7 @@ function PlaceDetailView({ go }: { go: (route: Route) => void }) {
   const { active, result, ui, patchUI, exclude, saveCurrentTrip, currentTripSaved } = useDemo()
   const detail = ui.detail
   const parking = useSelectedParking(detail?.id)
-  const place = placeById(detail?.id)
+  const place = placeById(detail?.id, result)
   const entry = result?.entries.find((e) => e.id === detail?.id)
   if (!detail || !place || !entry || !result) return null
   const number = result.entries.findIndex((e) => e.id === entry.id) + 1
@@ -235,7 +244,11 @@ function PlaceDetailView({ go }: { go: (route: Route) => void }) {
               주차 잔여 대수는 실시간이 아니에요
             </dd>
             <dt>주차 탐색 범위</dt>
-            <dd>직선 반경 {place.parkingRadius === 1000 ? '1km' : `${place.parkingRadius}m`}</dd>
+            <dd>
+              {place.parkingRadius === null
+                ? '조회 반경 미확인'
+                : `직선 반경 ${place.parkingRadius === 1000 ? '1km' : `${place.parkingRadius}m`}`}
+            </dd>
           </dl>
           <p className="sn-note">실시간 교통·영업 여부·주차 여유는 확인되지 않은 예시 정보예요.</p>
           <SecondaryButton
@@ -251,34 +264,69 @@ function PlaceDetailView({ go }: { go: (route: Route) => void }) {
 }
 
 export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
-  const { active, result, ui, newTrip, openEdit, search, retrySearch, startTrip, updateDraft } =
-    useDemo()
+  const {
+    active,
+    result,
+    ui,
+    newTrip,
+    openEdit,
+    recommendMore,
+    retryRoute,
+    retrySearch,
+    submitRecommendation,
+    updateDraft,
+  } = useDemo()
+  const retryWait = useSecondsRemaining(ui.apiFailure?.retryAt)
+  useSecondsRemaining(Date.parse(result?.api?.result.context_expires_at || ''))
+  const blocked = ui.busy || !!ui.apiFailure?.canResend || retryWait > 0
   if (!active.onboardingComplete) {
     const draft = active.onboardingDraft || active.conditions
-    const invalid = validateConditions(draft)
+    const invalid = validateRecommendation(draft)
     return (
       <>
         <PanelHeader title="AI 추천" subtitle="출발지와 하고 싶은 일을 알려주세요." />
         <div className="sn-scroll sn-form">
+          <RecommendationFeedback />
+          {ui.busy && (
+            <div className="sn-banner is-busy" role="status">
+              <ResponsePending>{ui.progress?.detail || '추천을 찾는 중이에요…'}</ResponsePending>
+            </div>
+          )}
+          {ui.notice && !ui.apiFailure && <p role="status">{ui.notice.text}</p>}
           <ConditionsForm
             initial={draft}
             mode="onboarding"
-            onSubmit={(c) => void startTrip(c)}
+            onSubmit={(c) => void submitRecommendation(c, true)}
             onChange={updateDraft}
           />
         </div>
         <footer className="sn-panel-foot">
-          <PrimaryButton type="submit" form="onboarding-form" disabled={!!invalid || ui.busy}>
+          <PrimaryButton type="submit" form="onboarding-form" disabled={!!invalid || blocked}>
             {ui.busy ? '찾는 중…' : '이 조건으로 찾아보기'}
           </PrimaryButton>
         </footer>
       </>
     )
   }
-  if (ui.detail && result) return <PlaceDetailView go={go} />
+  if (
+    ui.detail &&
+    result &&
+    ui.detail.resultId === result.id &&
+    result.entries.some((entry) => entry.id === ui.detail!.id)
+  )
+    return result.api && active.api ? (
+      <ApiPlaceDetail
+        key={`${active.trip}:${active.api.version}:${result.id}:${ui.detail.id}`}
+        result={result}
+        placeId={ui.detail.id}
+        go={go}
+      />
+    ) : (
+      <PlaceDetailView go={go} />
+    )
   const stale = result && active.retainedResult?.id === result.id && !ui.busy
   const entries = (result?.entries || []).filter((entry) => {
-    const place = placeById(entry.id)
+    const place = placeById(entry.id, result)
     return !!place
   })
   const conditions = result?.conditions || ui.progress?.conditions || active.conditions
@@ -297,14 +345,52 @@ export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
         subtitle={<span className="sn-summary">{conditionText(conditions)}</span>}
       />
       <div className="sn-scroll">
-        {ui.notice && (
-          <ErrorState
-            title={ui.notice.type === 'info' ? '안내' : '추천을 불러오지 못했어요'}
-            onRetry={() => void retrySearch()}
+        <RecommendationFeedback />
+        {ui.notice && !ui.apiFailure && (
+          <div
+            className={ui.notice.type === 'info' ? 'sn-banner' : 'sn-state is-error'}
+            role="status"
           >
-            {ui.notice.text}
-            {result && ' 아래 목록은 이전에 찾은 결과예요.'}
-          </ErrorState>
+            {!active.api && (
+              <ErrorState
+                title={ui.notice.type === 'info' ? '안내' : '추천을 불러오지 못했어요'}
+                onRetry={active.api ? undefined : () => void retrySearch()}
+              >
+                {ui.notice.text}
+                {stale && ' 아래 목록은 이전에 찾은 결과예요.'}
+              </ErrorState>
+            )}
+            {active.api && <p>{ui.notice.text}</p>}
+          </div>
+        )}
+        {active.general?.id === result?.id && result && (
+          <div className="sn-banner" role="status">
+            <p>이동시간을 확인하지 못한 일반 후보예요. 추천 순위와 성공 기록에 포함하지 않아요.</p>
+            {active.api &&
+              !conditionsEqual(displayConditions(active.api.conditions), result.conditions) && (
+                <p>현재 조건이 후보 조회 당시와 달라요. 새 조건으로 추천받아 주세요.</p>
+              )}
+            <SecondaryButton
+              disabled={
+                blocked ||
+                (!!result.api &&
+                  (resultContextStatus(result) !== 'available' ||
+                    !conditionsEqual(displayConditions(active.api!.conditions), result.conditions)))
+              }
+              onClick={() => void retryRoute()}
+            >
+              같은 후보 이동시간 재확인
+            </SecondaryButton>
+          </div>
+        )}
+        {result && (
+          <>
+            <ResultContextNotice result={result} />
+            <p className="sn-note">
+              {active.general?.id === result.id ? '후보 조회' : '추천 당시 조회'}:{' '}
+              {dateLabel(result.time)}
+            </p>
+          </>
         )}
         {stale && (
           <div className="sn-banner" role="status">
@@ -315,7 +401,7 @@ export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
         )}
         {ui.busy && (
           <div className="sn-banner is-busy" role="status">
-            {ui.progress?.detail || '추천을 찾는 중이에요…'}
+            <ResponsePending>{ui.progress?.detail || '추천을 찾는 중이에요…'}</ResponsePending>
           </div>
         )}
         {result?.entries.length ? (
@@ -327,7 +413,7 @@ export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
                     key={entry.id}
                     index={result.entries.indexOf(entry)}
                     entry={entry}
-                    place={placeById(entry.id)!}
+                    place={placeById(entry.id, result)!}
                     selected={active.selected === entry.id}
                     go={go}
                   />
@@ -353,8 +439,8 @@ export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
       <footer className="sn-panel-foot is-row">
         <SecondaryButton
           className="is-compact"
-          disabled={ui.busy}
-          onClick={() => void search(active.conditions)}
+          disabled={blocked}
+          onClick={() => void recommendMore()}
         >
           <Icon name="refresh" />
           {ui.busy ? '찾는 중…' : '다른 곳도'}

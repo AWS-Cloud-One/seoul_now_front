@@ -139,7 +139,9 @@ export function createMapLayers(
   }
   function mapNeighborhood(result) {
     // Match the displayed results, including a retained result during a new search.
-    const places = (result?.entries || []).map((entry) => placeById(entry.id)).filter(Boolean)
+    const places = (result?.entries || [])
+      .map((entry) => placeById(entry.id, result))
+      .filter(Boolean)
     return {
       places,
       parking: PARKING_LOCATIONS,
@@ -194,15 +196,17 @@ export function createMapLayers(
   let focusedParkingKey = ''
   function highlightParking(id) {
     highlightedParking = id
-    const location = layers.parking && id
-      ? PARKING_LOCATIONS.find((item) =>
-          item.records.some((record) => record.id === id || record.memberIds?.includes(id)),
-        )
-      : undefined
+    const location =
+      layers.parking && id
+        ? PARKING_LOCATIONS.find((item) =>
+            item.records.some((record) => record.id === id || record.memberIds?.includes(id)),
+          )
+        : undefined
     const record = location?.records.find((item) => item.id === id || item.memberIds?.includes(id))
     const markerId = record?.id
     for (const [key, marker] of parkingItems) {
-      const individual = parkingMembers.get(key)?.size === 1 && parkingMembers.get(key)?.has(markerId)
+      const individual =
+        parkingMembers.get(key)?.size === 1 && parkingMembers.get(key)?.has(markerId)
       const element = marker.getElement()
       element?.classList.remove('is-selected')
       element?.setAttribute('aria-pressed', 'false')

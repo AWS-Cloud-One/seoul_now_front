@@ -4,9 +4,15 @@ import { useDemo } from '../../useDemo'
 import Icon from '../Icon'
 import { useLayout } from './layout'
 import { SelectionSummary } from './MapOverlays'
-import { ErrorState, PanelHeader } from './ui'
+import { PanelHeader } from './ui'
+import ChatClarification from '../ChatClarification'
+import RecommendationFeedback from '../RecommendationFeedback'
+import { displayConditions, resultContextStatus } from '../../apiState'
+import { useSecondsRemaining } from '../../useSecondsRemaining'
 import { focusMap } from './useRoute'
 import type { Route } from './useRoute'
+import { recommendationQuestion } from '../../recommendationQuestion'
+import ResponsePending from '../ResponsePending'
 
 /** Switch between the recommendation list and the AI conversation without leaving the panel. */
 export function PanelTabs({
@@ -51,50 +57,53 @@ export default function ChatPanel({
     result,
     ui,
     submitChat,
-    retryChat,
-    retrySearch,
+    askSelectedPlace,
+    activateResult,
     updateChatDraft,
     selectPlace,
     openDetail,
   } = useDemo()
   const { wide } = useLayout()
-  const [text, setText] = useState(active.workspaceView?.chatDraft || '')
+  const text = active.workspaceView?.chatDraft || ''
+  const retryWait = useSecondsRemaining(ui.apiFailure?.retryAt)
+  const blocked = ui.busy || !!ui.apiFailure?.canResend || retryWait > 0
   const [samplesOpen, setSamplesOpen] = useState(false)
   const samplesId = useId()
   const samplesToggle = useRef<HTMLButtonElement>(null)
   const log = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
-  const selected = placeById(active.selected)
-  const conditions = result?.conditions || active.conditions
-  const samples = result
-    ? [
-        selected ? `${selected.name}은 왜 추천했어?` : '여긴 왜 추천했어?',
-        '더 조용한 곳 있어?',
-        '주차 편한 곳으로 바꿔줘',
-        '식사로 바꾸고 40분까지',
-      ]
-    : ['서울역에서 카페', '강남역에서 전시']
+  const selected = placeById(active.selected, result)
+  const conditions = active.api ? displayConditions(active.api.conditions) : active.conditions
+  const pending = active.api?.clarification
+  useSecondsRemaining(Date.parse(result?.api?.result.context_expires_at || ''))
+  const targetAvailable = !!result?.api && resultContextStatus(result) === 'available'
+  const samples = pending?.required_fields.includes('headcount')
+    ? ['2명', '4명', '6명']
+    : pending?.required_fields.includes('purposes')
+      ? ['카페', '식사', '산책']
+      : result
+        ? [
+            selected ? recommendationQuestion(selected.name) : '여긴 왜 추천했어?',
+            '더 조용한 곳 있어?',
+            '주차 편한 곳으로 바꿔줘',
+            '식사로 바꾸고 40분까지',
+          ]
+        : ['서울역에서 카페', '강남역에서 전시']
 
   // New messages stack at the bottom, but never yank the view while the user reads older ones.
   useEffect(() => {
     const element = log.current
     if (element && pinned.current) element.scrollTop = element.scrollHeight
-  }, [active.chat.length, ui.busy])
+  }, [active.chat.length, ui.busy, pending])
 
   const send = (value: string) => {
-    if (!value.trim() || ui.busy) return
-    if (!active.onboardingComplete) {
-      void submitChat(value)
-      return
-    }
+    if (!value.trim() || blocked) return
     pinned.current = true
     void submitChat(value)
-    setText('')
-    updateChatDraft('')
   }
   const showPlace = (name?: string) => {
-    const entry = result?.entries.find((e) => placeById(e.id)?.name === name)
-    const place = placeById(entry?.id)
+    const entry = result?.entries.find((e) => placeById(e.id, result)?.name === name)
+    const place = placeById(entry?.id, result)
     if (!entry || !place) return
     selectPlace(entry.id)
     focusMap(place.lat, place.lon, 16)
@@ -116,7 +125,7 @@ export default function ChatPanel({
             <span className="sn-summary sn-chat-conditions-desktop">
               {active.onboardingComplete
                 ? `${conditionText(conditions)}${selected ? ` · 선택: ${selected.name}` : ''}`
-                : '출발지와 방문 목적을 먼저 정해 주세요.'}
+                : '출발지와 하고 싶은 일을 편하게 말해 주세요.'}
             </span>
             {active.onboardingComplete ? (
               <details className="sn-chat-conditions-mobile" key={active.trip}>
@@ -132,7 +141,7 @@ export default function ChatPanel({
               </details>
             ) : (
               <span className="sn-chat-conditions-mobile">
-                출발지와 방문 목적을 먼저 정해 주세요.
+                출발지와 하고 싶은 일을 편하게 말해 주세요.
               </span>
             )}
           </>
@@ -173,27 +182,73 @@ export default function ChatPanel({
           <div key={index} className={`sn-bubble ${message.role === 'user' ? 'is-user' : ''}`}>
             <p>{message.text}</p>
             {message.role !== 'user' && message.place && (
-              <button type="button" className="sn-link" onClick={() => showPlace(message.place)}>
-                {message.place} 지도에서 보기
+              <button
+                type="button"
+                className="sn-chat-action"
+                onClick={() => showPlace(message.place)}
+              >
+                <Icon name="map" />
+                <span>{message.place} 지도에서 보기</span>
               </button>
             )}
+            {(message.taskResults?.length
+              ? message.taskResults.flatMap((task) => (task.answer ? [task.answer] : []))
+              : message.answer
+                ? [message.answer]
+                : []
+            ).map((answer, answerIndex) => (
+              <span key={answerIndex}>
+                {answer.original_recommended_at && (
+                  <p className="sn-note">추천 당시: {dateLabel(answer.original_recommended_at)}</p>
+                )}
+                {answer.checked_at && (
+                  <p className="sn-note">현재 정보 조회: {dateLabel(answer.checked_at)}</p>
+                )}
+              </span>
+            ))}
+            {message.resultId &&
+              [...active.groups, ...(active.general ? [active.general] : [])].some(
+                (group) => group.id === message.resultId,
+              ) && (
+                <button
+                  type="button"
+                  className="sn-chat-action"
+                  onClick={() => {
+                    activateResult(message.resultId!)
+                    go('recommend')
+                  }}
+                >
+                  <span>이 추천 보기</span>
+                  <Icon name="chevronRight" />
+                </button>
+              )}
             <time dateTime={message.time}>{dateLabel(message.time)}</time>
           </div>
         ))}
+        <ChatClarification />
         {ui.busy && (
-          <div className="sn-bubble is-pending">{ui.progress?.detail || '답을 찾는 중이에요…'}</div>
+          <div className="sn-bubble is-pending" role="status">
+            <ResponsePending>{ui.progress?.detail || '답을 찾는 중이에요…'}</ResponsePending>
+          </div>
         )}
       </div>
       <footer className="sn-chat-foot">
-        {ui.chatFailure?.tripId === active.trip && (
-          <ErrorState title="답변을 받지 못했어요" onRetry={() => void retryChat()}>
-            연결이 끊겼거나 응답 시간이 초과됐어요. 다시 시도하면 같은 메시지를 보내요.
-          </ErrorState>
-        )}
-        {ui.notice && (
-          <ErrorState title="추천 요청을 완료하지 못했어요" onRetry={() => void retrySearch()}>
+        <RecommendationFeedback />
+        {ui.notice && !ui.apiFailure && (
+          <p className="sn-note" role="status">
             {ui.notice.text}
-          </ErrorState>
+          </p>
+        )}
+        {selected && targetAvailable && (
+          <button
+            type="button"
+            className="sn-chat-action is-suggestion"
+            disabled={blocked}
+            onClick={() => void askSelectedPlace(recommendationQuestion(selected.name))}
+          >
+            <Icon name="edit" />
+            <span>{selected.name} 추천 이유 묻기</span>
+          </button>
         )}
         <button
           type="button"
@@ -213,12 +268,14 @@ export default function ChatPanel({
               type="button"
               key={sample}
               onClick={() => {
-                send(sample)
+                if (selected && sample === recommendationQuestion(selected.name) && targetAvailable)
+                  void askSelectedPlace(sample)
+                else send(sample)
                 setSamplesOpen(false)
                 if (window.matchMedia('(max-width: 900px)').matches)
                   samplesToggle.current?.focus({ preventScroll: true })
               }}
-              disabled={ui.busy}
+              disabled={blocked}
             >
               {sample}
             </button>
@@ -233,15 +290,18 @@ export default function ChatPanel({
         >
           <input
             id="chat-input"
+            maxLength={500}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault()
+            }}
             value={text}
             onChange={(event) => {
-              setText(event.target.value)
               updateChatDraft(event.target.value)
             }}
             aria-label="AI에게 보낼 메시지"
             placeholder="예: 더 조용한 곳으로 바꿔줘"
           />
-          <button type="submit" aria-label="보내기" disabled={ui.busy || !text.trim()}>
+          <button type="submit" aria-label="보내기" disabled={blocked || !text.trim()}>
             <Icon name="send" />
           </button>
         </form>

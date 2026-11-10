@@ -1,3 +1,5 @@
+import { information, FIXTURE_TIME } from '../api/testFixtures'
+import { mockScreenApi } from '../api/screenTestApi'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -30,7 +32,9 @@ it('모바일 추천을 별도 대화창 없이 열고 선택·저장·복원·�
   render(<App />)
   await user.click(screen.getByRole('button', { name: '시작하기' }))
   await user.click(screen.getByRole('button', { name: 'AI 추천' }))
-  await user.selectOptions(screen.getByLabelText(/어디에서 출발하세요/), '서울역')
+  mockScreenApi()
+  await user.type(screen.getByRole('searchbox', { name: /어디에서 출발하세요/ }), '서울역')
+  await user.click(await screen.findByRole('button', { name: /서울역.*서울 중구/ }))
   await user.click(screen.getByRole('checkbox', { name: '카페' }))
   await user.click(screen.getByRole('button', { name: '이 조건으로 찾아보기' }))
   await waitFor(() => expect(screen.getAllByRole('button', { name: /선택$/ })).toHaveLength(3))
@@ -64,16 +68,34 @@ it('모바일 추천을 별도 대화창 없이 열고 선택·저장·복원·�
   const request = vi
     .fn()
     .mockRejectedValueOnce(new Error('offline'))
-    .mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        summary: { distance: 4200, duration: 600 },
-        coordinates: [
-          [126.97, 37.55],
-          [126.98, 37.57],
-        ],
-      }),
-    })
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          request_id: 'test',
+          server_time: FIXTURE_TIME,
+          error: null,
+          data: {
+            checked_at: FIXTURE_TIME,
+            route: information({
+              distance_meters: 4200,
+              duration_seconds: 600,
+              taxi_fare_krw: null,
+              toll_fare_krw: null,
+              geometry_reason: null,
+              geometry: {
+                type: 'MultiLineString',
+                coordinates: [
+                  [
+                    [126.97, 37.55],
+                    [126.98, 37.57],
+                  ],
+                ],
+              },
+            }),
+          },
+        }),
+      ),
+    )
   vi.stubGlobal('fetch', request)
   await user.click(screen.getByRole('button', { name: name + '까지 길찾기' }))
   expect(await screen.findByText('서버에 연결하지 못했어요.')).toBeInTheDocument()
@@ -81,6 +103,6 @@ it('모바일 추천을 별도 대화창 없이 열고 선택·저장·복원·�
   expect(await screen.findByText('자동차 10분')).toBeInTheDocument()
   expect(request).toHaveBeenCalledTimes(2)
   const url = new URL(request.mock.calls[1][0], 'http://localhost')
-  expect(url.pathname).toBe('/api/v1/kakao/directions')
-  expect(url.searchParams.get('origin_lat')).toBeTruthy()
+  expect(url.pathname).toBe('/api/v1/locations/routes/driving')
+  expect(url.searchParams.get('origin_latitude')).toBeTruthy()
 }, 15000)

@@ -1,5 +1,18 @@
 import { createContext, useEffect, useRef, useState } from 'react'
 import { loadSavedTrips, persistSavedTrips } from './savedTrips'
+import { apiClient, ApiTransportError } from '../api/client'
+import type { ChatTarget, ConditionsPatch, ConversationData, OriginAction } from '../api/contracts'
+import { originChoices, originContextUnavailable, recentChatMessages } from './chatContext'
+import { RequestManager } from '../api/requestManager'
+import type { RequestAttempt } from '../api/requestManager'
+import { recommendationPatch, validateRecommendation } from './recommendationConditions'
+import {
+  applyConversationResponse,
+  createServerTrip,
+  displayConditions,
+  normalizeResult,
+  resultContextStatus,
+} from './apiState'
 import {
   conditionChanges,
   conditionsEqual,
@@ -7,11 +20,8 @@ import {
   MockService,
   newState,
   normalizeTrip,
-  patchConditions,
-  placeById,
   validSavedTrip,
   validateConditions,
-  dateLabel,
 } from './domain.js'
 import type {
   Conditions,
@@ -28,19 +38,11 @@ import type {
   Trip,
 } from './types'
 
-async function chatRequest<T>(run: () => Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      run(),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('Chat request timed out')), 30000)
-      }),
-    ])
-  } finally {
-    clearTimeout(timer)
-  }
-}
+type ChatOptions = { originAction?: OriginAction; target?: ChatTarget }
+type LastApiCommand =
+  | { kind: 'recommendation'; tripId: string; patch: ConditionsPatch }
+  | { kind: 'chat'; tripId: string; text: string; options: ChatOptions }
+  | { kind: 'retry-routes'; tripId: string; resultId: string }
 
 const STORAGE_KEY = 'seoul-next-stop-trips-v2'
 const defaultLayers: Layers = { roads: true, parking: true, population: true }
@@ -48,7 +50,14 @@ function loadStore(): Store {
   try {
     const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || 'null')
     if (saved?.schema === 2 && Array.isArray(saved.trips)) {
-      const trips: Trip[] = saved.trips.filter(validSavedTrip).map(normalizeTrip)
+      const trips: Trip[] = saved.trips
+        .filter(validSavedTrip)
+        .map(normalizeTrip)
+        .map((trip: Trip) => ({
+          ...trip,
+          groups: trip.groups.map(normalizeResult),
+          general: trip.general ? normalizeResult(trip.general) : null,
+        }))
       if (trips.length)
         return {
           schema: 2,
@@ -84,7 +93,14 @@ function initialPage() {
 const initialUI = () => ({
   page: initialPage(),
   busy: false,
-  chatFailure: null as { tripId: string; text: string } | null,
+  apiFailure: null as {
+    kind?: 'chat' | 'recommendation' | 'retry-routes'
+    message: string
+    canResend: boolean
+    retryAfterSeconds: number | null
+    retryAt?: number
+    retryable?: boolean
+  } | null,
   scenario: 'normal',
   notice: null as Notice | null,
   progress: null as Progress | null,
@@ -107,6 +123,8 @@ export function useDemoController() {
     notice: store.trips.find((t) => t.trip === store.activeTripId)?.workspaceView?.notice || null,
   }))
   const request = useRef(0)
+  const apiRequests = useRef(new RequestManager())
+  const lastApiCommand = useRef<LastApiCommand | null>(null)
   const retry = useRef<{ conditions: Conditions; fromChat: boolean } | null>(
     store.trips.find((t) => t.trip === store.activeTripId)?.workspaceView?.retry || null,
   )
@@ -140,6 +158,213 @@ export function useDemoController() {
   function getResult(trip = getTrip()) {
     return trip.groups.find((g) => g.id === trip.current) || trip.general
   }
+  function apiScope() {
+    const trip = getTrip()
+    return {
+      tripId: trip.trip,
+      version: trip.api?.version ?? 0,
+      resultId: getResult(trip)?.id ?? null,
+    }
+  }
+  function invalidateRequests(clearFailure = true) {
+    request.current++
+    apiRequests.current.cancel()
+    if (clearFailure) setUI((previous) => ({ ...previous, apiFailure: null }))
+  }
+  async function sendApiAttempt(attempt: RequestAttempt) {
+    const chat = attempt.path === '/chat/messages'
+    patchUI({ busy: true, apiFailure: null, notice: null })
+    try {
+      const response = await apiClient.request<ConversationData>(attempt.path, {
+        method: 'POST',
+        body: attempt.body,
+        signal: attempt.signal,
+        // The recommendation engine has a 90-second processing budget.
+        timeoutMs: chat ? 130000 : 100000,
+      })
+      if (!apiRequests.current.isCurrent(attempt, apiScope())) return
+      // An HTTP error still may carry an already-applied condition update.
+      if (
+        response.envelope.request_id !== attempt.requestId ||
+        (response.ok && !response.envelope.data)
+      ) {
+        throw new ApiTransportError(
+          'protocol',
+          '요청과 응답의 식별자가 일치하지 않아요.',
+          response.status,
+        )
+      }
+      updateTrip((trip) => {
+        try {
+          if (response.envelope.data && !applyConversationResponse(trip, attempt, response)) {
+            throw new Error('응답 문맥 불일치')
+          }
+          if (
+            chat &&
+            trip.api?.clarification?.origin_context &&
+            ['CONTEXT_EXPIRED', 'CONTEXT_CONDITIONS_MISMATCH', 'INVALID_CONTEXT'].includes(
+              response.envelope.error?.code || '',
+            )
+          ) {
+            trip.api.clarificationInvalid = response.envelope.error!.message
+          }
+        } catch {
+          throw new ApiTransportError(
+            'protocol',
+            '서버 응답의 추천 정보나 여행 문맥을 확인할 수 없어요.',
+            response.status,
+          )
+        }
+      })
+      if (chat && !response.ok && response.envelope.data?.condition_update.applied) {
+        // A failed recommendation may have committed the selected origin already.
+        lastApiCommand.current = {
+          kind: 'chat',
+          tripId: getTrip().trip,
+          text: '현재 조건으로 다시 추천해줘',
+          options: {},
+        }
+      }
+      const stillRunning = response.envelope.error?.code === 'REQUEST_IN_PROGRESS'
+      apiRequests.current.finish(
+        attempt,
+        stillRunning ? 'unknown' : 'received',
+        response.retryAfterSeconds,
+      )
+      patchUI({
+        busy: false,
+        progress: null,
+        notice:
+          response.envelope.data &&
+          (!chat || response.envelope.data.warnings.length > 0) &&
+          (response.envelope.data.kind !== 'recommendation' ||
+            response.envelope.data.warnings.length)
+            ? {
+                type: 'info',
+                text: [
+                  response.envelope.data.message,
+                  ...response.envelope.data.warnings.map((w) => w.message),
+                ].join('\n'),
+              }
+            : null,
+        apiFailure: response.ok
+          ? null
+          : {
+              kind: chat
+                ? 'chat'
+                : attempt.path.endsWith('/retry-routes')
+                  ? 'retry-routes'
+                  : 'recommendation',
+              message: response.envelope.error?.message || '요청에 실패했어요.',
+              canResend: stillRunning,
+              retryAfterSeconds: response.retryAfterSeconds,
+              retryAt: response.retryAfterSeconds
+                ? Date.now() + response.retryAfterSeconds * 1000
+                : 0,
+              retryable: response.envelope.error?.retryable,
+            },
+      })
+    } catch (error) {
+      if (!apiRequests.current.isCurrent(attempt, apiScope())) return
+      // No trustworthy response: the server may have committed. Preserve the exact command.
+      const unknown = error instanceof ApiTransportError
+      apiRequests.current.finish(attempt, unknown ? 'unknown' : 'received')
+      patchUI({
+        busy: false,
+        progress: null,
+        apiFailure: {
+          kind: chat
+            ? 'chat'
+            : attempt.path.endsWith('/retry-routes')
+              ? 'retry-routes'
+              : 'recommendation',
+          message: error instanceof Error ? error.message : '응답을 처리하지 못했어요.',
+          canResend: unknown,
+          retryAfterSeconds: null,
+        },
+      })
+    }
+  }
+  async function recommendFromApi(conditionsPatch: ConditionsPatch) {
+    if (ui.busy || apiRequests.current.busy || apiRequests.current.retryAfterSeconds > 0) return
+    if (apiRequests.current.canResend) {
+      notify('이전 요청의 처리 결과를 먼저 다시 확인해 주세요.')
+      return
+    }
+    if (!getTrip().api)
+      updateTrip((trip) => {
+        trip.api = createServerTrip(trip.trip)
+      })
+    const trip = getTrip()
+    const server = trip.api!
+    const attempt = apiRequests.current.start(apiScope(), '/recommendations', {
+      trip_id: server.tripId,
+      condition_version: server.version,
+      current_conditions: server.conditions,
+      excluded_place_ids: [...new Set([...server.seenPlaceIds, ...trip.excluded])],
+      conditions_patch: conditionsPatch,
+    })
+    if (attempt) {
+      lastApiCommand.current = {
+        kind: 'recommendation',
+        tripId: trip.trip,
+        patch: structuredClone(conditionsPatch),
+      }
+      await sendApiAttempt(attempt)
+    }
+  }
+  async function retryApiRequest() {
+    const attempt = apiRequests.current.retry(apiScope())
+    if (attempt) await sendApiAttempt(attempt)
+  }
+  async function submitRecommendation(conditions: Conditions, onboarding = false) {
+    const error = validateRecommendation(conditions)
+    if (error) {
+      notify(error)
+      return
+    }
+    if (
+      ui.busy ||
+      apiRequests.current.busy ||
+      apiRequests.current.canResend ||
+      apiRequests.current.retryAfterSeconds > 0
+    )
+      return
+    const patch = recommendationPatch(conditions, getTrip().api?.conditions)
+    updateTrip((trip) => {
+      trip.onboardingDraft = structuredClone(conditions)
+      message(trip, `${conditionText(conditions)} 조건으로 찾아줘.`, {}, 'user')
+    })
+    patchUI({
+      detail: null,
+      panel: null,
+      progress: {
+        mode: 'search',
+        stage: 'conditions',
+        detail: '선택한 조건으로 추천을 찾고 있어요.',
+        conditions,
+      },
+    })
+    if (onboarding) navigate('main')
+    await recommendFromApi(patch)
+  }
+  async function recommendMore() {
+    if (!getTrip().api?.conditions.origin) {
+      patchUI({ panel: { type: 'edit' } })
+      notify('출발지를 검색해서 확인한 뒤 다시 추천받아 주세요.')
+      return
+    }
+    await recommendFromApi({})
+  }
+  async function retryRecommendation() {
+    if (apiRequests.current.canResend) return retryApiRequest()
+    const last = lastApiCommand.current
+    if (last?.tripId !== getTrip().trip) return
+    if (last.kind === 'chat') await submitChat(last.text, last.options, true)
+    else if (last.kind === 'retry-routes') {
+      if (getResult()?.id === last.resultId) await retryRoute()
+    } else await recommendFromApi(last.patch)
+  }
   function notify(text: string) {
     clearTimeout(toastTimer.current)
     patchUI({ toast: text })
@@ -159,7 +384,7 @@ export function useDemoController() {
   }, [store, ui.notice])
   useEffect(
     () => () => {
-      request.current++
+      invalidateRequests(false)
       clearTimeout(toastTimer.current)
     },
     [],
@@ -194,6 +419,7 @@ export function useDemoController() {
     return group
   }
   async function search(conditions: Conditions, fromChat = false, selectedScenario = ui.scenario) {
+    if (getTrip().api) return submitRecommendation(conditions)
     const error = validateConditions(conditions)
     if (error) {
       notify(error)
@@ -345,7 +571,7 @@ export function useDemoController() {
   }
   function switchTrip(tripId: string) {
     preserveWorkspace()
-    request.current++
+    invalidateRequests()
     updateStore((s) => {
       s.activeTripId = tripId
     })
@@ -365,7 +591,7 @@ export function useDemoController() {
     preserveWorkspace()
     retry.current = null
     const trip = newState()
-    request.current++
+    invalidateRequests()
     updateStore((s) => {
       s.trips.unshift(trip)
       s.activeTripId = trip.trip
@@ -383,7 +609,7 @@ export function useDemoController() {
   }
   function deleteTrip(tripId: string) {
     const wasActive = getTrip().trip === tripId
-    if (wasActive) request.current++
+    if (wasActive) invalidateRequests()
     updateStore((s) => {
       s.trips = s.trips.filter((t) => t.trip !== tripId)
       if (!s.trips.length) s.trips.push(newState())
@@ -407,11 +633,14 @@ export function useDemoController() {
       getResult()?.id !== target.id ||
       !conditionsEqual(getTrip().conditions, target.conditions)
     ) {
-      request.current++
+      invalidateRequests()
       patchUI({ busy: false, progress: null })
     }
     updateTrip((t) => {
-      if (getResult(t)?.id !== target.id || !conditionsEqual(t.conditions, target.conditions)) {
+      if (
+        !t.api &&
+        (getResult(t)?.id !== target.id || !conditionsEqual(t.conditions, target.conditions))
+      ) {
         t.conditions = structuredClone(target.conditions)
         t.conditionVersion++
         t.pendingChat = null
@@ -434,6 +663,41 @@ export function useDemoController() {
     })
   }
   async function retryRoute() {
+    if (getTrip().api) {
+      if (!canStartApiRequest()) return
+      const trip = getTrip(),
+        server = trip.api!,
+        general = trip.general
+      if (!general?.api || getResult()?.id !== general.id) return
+      if (resultContextStatus(general) !== 'available') {
+        notify('후보의 조회 시간이 지났어요. 기존 후보는 유지하며 새로 추천받을 수 있어요.')
+        return
+      }
+      if (!conditionsEqual(displayConditions(server.conditions), general.conditions)) {
+        notify('현재 조건이 후보를 찾았을 때와 달라요. 현재 조건으로 새로 추천받아 주세요.')
+        return
+      }
+      const attempt = apiRequests.current.start(apiScope(), '/recommendations/retry-routes', {
+        trip_id: server.tripId,
+        condition_version: server.version,
+        current_conditions: server.conditions,
+        excluded_place_ids: [...new Set([...server.seenPlaceIds, ...trip.excluded])],
+        result_id: general.id,
+        context_token: general.api.result.context_token,
+      })
+      if (!attempt) return
+      lastApiCommand.current = { kind: 'retry-routes', tripId: trip.trip, resultId: general.id }
+      patchUI({
+        progress: {
+          mode: 'route',
+          stage: 'routes',
+          detail: '같은 후보의 이동시간을 다시 확인하고 있어요.',
+          conditions: general.conditions,
+        },
+      })
+      await sendApiAttempt(attempt)
+      return
+    }
     const general = getTrip().general
     if (!general || ui.busy) return
     if (!conditionsEqual(general.conditions, getTrip().conditions)) {
@@ -474,120 +738,143 @@ export function useDemoController() {
       },
     })
   }
-  async function submitChat(text: string, resending = false) {
-    if (!text.trim() || ui.busy) return
-    if (!getTrip().onboardingComplete) {
-      notify('출발지와 방문 목적을 먼저 선택해 주세요.')
-      return
+  function canStartApiRequest() {
+    if (ui.busy || apiRequests.current.busy) return false
+    if (apiRequests.current.canResend) {
+      notify('이전 요청의 처리 결과를 먼저 다시 확인해 주세요.')
+      return false
     }
-    const id = ++request.current
-    const tripId = getTrip().trip
-    updateTrip((t) => {
-      t.workspaceView = { ...t.workspaceView, chatDraft: '' }
-      if (!resending) message(t, text.trim(), {}, 'user')
+    if (apiRequests.current.retryAfterSeconds > 0) {
+      notify(`${apiRequests.current.retryAfterSeconds}초 후 다시 시도해 주세요.`)
+      return false
+    }
+    return true
+  }
+  async function submitChat(text: string, options: ChatOptions = {}, retrying = false) {
+    const content = text.trim()
+    if (!content || !canStartApiRequest()) return false
+    if ([...content].length > 500) {
+      notify('메시지는 500자 이내로 입력해 주세요.')
+      return false
+    }
+    if (!getTrip().api)
+      updateTrip((trip) => {
+        trip.api = createServerTrip(trip.trip)
+      })
+    const trip = getTrip(),
+      server = trip.api!
+    const pending = server.clarification
+    const invalidOrigin = originContextUnavailable(trip)
+    const action = options.originAction
+    if (action) {
+      const context = pending?.origin_context
+      if (
+        !context ||
+        invalidOrigin ||
+        context.context_token !== action.context_token ||
+        options.target ||
+        context.mode === 'confirmed' ||
+        (action.action === 'select' &&
+          !originChoices(pending!).some(
+            (choice) => choice.value.candidate_id === action.candidate_id,
+          ))
+      ) {
+        notify(invalidOrigin || '새 출발지 질문을 확인한 뒤 다시 선택해 주세요.')
+        return false
+      }
+    }
+    if (options.target) {
+      const result = getResult()
+      if (
+        !result?.api ||
+        result.id !== options.target.result_id ||
+        !result.entries.some((entry) => entry.id === options.target!.place_id) ||
+        result.api.result.context_token !== options.target.context_token ||
+        resultContextStatus(result) !== 'available'
+      ) {
+        notify(
+          '추천 정보의 조회 시간이 지났어요. 기존 카드는 유지하며 새 추천에서 다시 질문할 수 있어요.',
+        )
+        return false
+      }
+    }
+    const currentResult = getResult()
+    const selectedId = trip.selected
+    const contextualTarget =
+      !action &&
+      currentResult?.api &&
+      currentResult.entries.some((entry) => entry.id === selectedId) &&
+      resultContextStatus(currentResult) === 'available'
+        ? {
+            result_id: currentResult.id,
+            place_id: selectedId,
+            context_token: currentResult.api.result.context_token!,
+          }
+        : undefined
+    const target = options.target ?? contextualTarget
+    const body = {
+      trip_id: server.tripId,
+      condition_version: server.version,
+      current_conditions: server.conditions,
+      excluded_place_ids: [...new Set([...server.seenPlaceIds, ...trip.excluded])],
+      message: content,
+      recent_messages: recentChatMessages(trip),
+      ...(pending && !invalidOrigin ? { pending_clarification: pending } : {}),
+      ...(action ? { origin_action: action } : {}),
+      ...(target ? { target } : {}),
+    }
+    const attempt = apiRequests.current.start(apiScope(), '/chat/messages', body)
+    if (!attempt) return false
+    lastApiCommand.current = {
+      kind: 'chat',
+      tripId: trip.trip,
+      text: content,
+      options: structuredClone(options),
+    }
+    updateTrip((draft) => {
+      draft.workspaceView = { ...draft.workspaceView, chatDraft: '' }
+      if (invalidOrigin) {
+        draft.api!.clarification = null
+        draft.api!.clarificationInvalid = null
+      }
+      if (!retrying) message(draft, content, {}, 'user')
     })
     patchUI({
-      busy: true,
       progress: {
         mode: 'interpret',
         stage: 'conditions',
-        detail: '메시지에서 요청과 필요한 조건을 확인하고 있어요.',
+        detail: '메시지와 필요한 조건을 확인하고 있어요.',
         conditions: null,
       },
     })
-    patchUI({ chatFailure: null })
-    try {
-      const parsed = await chatRequest(() => MockService.interpret(text))
-      if (id !== request.current) return
-      patchUI({ busy: false, progress: null })
-      if (parsed.kind === 'question') {
-        const current = getResult(),
-          trip = getTrip(),
-          place = placeById(trip.selected)
-        const entry = current?.entries.find((e) => e.id === place?.id)
-        if (!place || !entry || !current) {
-          updateTrip((t) =>
-            message(t, '어느 장소가 궁금하세요? 목록이나 지도에서 장소를 선택해 주세요.'),
-          )
-          return
-        }
-        let answer = ''
-        if (parsed.question === 'reason')
-          answer = `${place.name}을 제안한 당시 이유예요.\n${entry.reason}\n당시 조건: ${conditionText(current.conditions)}\n원래 조회: ${dateLabel(entry.queryTime)}. 당시 판단과 조회 시각을 유지했어요.`
-        else if (parsed.question === 'parking')
-          answer =
-            '현재 빈자리는 확인할 수 없어요. 주변 주차장 목록과 직선거리만 제공하는 모의 데이터예요. 주차 정보가 없더라도 주차장이 없다는 뜻은 아닙니다.'
-        else {
-          patchUI({
-            busy: true,
-            progress: {
-              mode: 'question',
-              stage: 'routes',
-              detail: '선택한 장소의 이동시간을 별도로 확인하고 있어요.',
-              conditions: null,
-            },
-          })
-          const traffic = await chatRequest(() => MockService.traffic(place.id, current.conditions))
-          if (id !== request.current) return
-          answer = `별도 교통 조회: 자동차 약 ${traffic.eta}분. 조회 ${dateLabel(traffic.time)}.\n원래 추천은 ${entry.eta === null ? '이동시간 확인 불가' : entry.eta + '분'}, ${dateLabel(entry.queryTime)} 조회로 유지해요. 실시간 정보가 아닙니다.`
-        }
-        updateTrip((t) => message(t, answer, { place: place.name }))
-        patchUI({ busy: false, progress: null })
-        return
+    await sendApiAttempt(attempt)
+    return true
+  }
+  function restartExpiredOrigin() {
+    if (!canStartApiRequest()) return
+    updateTrip((trip) => {
+      if (trip.api) {
+        trip.api.clarification = null
+        trip.api.clarificationInvalid = null
       }
-      if (parsed.kind === 'alternatives') {
-        await search(getTrip().conditions, true)
-        return
-      }
-      if (parsed.kind === 'unsupported') {
-        updateTrip((t) =>
-          message(
-            t,
-            '이 자유 입력은 해석하지 못했어요. 실제 AI가 아니므로 임의로 조건을 바꾸지 않습니다. 아래 예시를 사용하거나 조건을 직접 입력해 주세요.',
-            { fallback: true },
-          ),
-        )
-        return
-      }
-      const pending = getTrip().pendingChat
-      const patch = { ...pending?.patch, ...parsed.patch }
-      const candidate = patchConditions(getTrip().conditions, patch)
-      let clarification = parsed.kind === 'clarify' ? parsed.message : validateConditions(candidate)
-      if (pending?.need && !Object.hasOwn(parsed.patch || {}, pending.need))
-        clarification =
-          pending.need === 'headcount'
-            ? '정확한 인원을 알려주세요. 예: 6명'
-            : pending.need === 'departure'
-              ? '출발지를 한 곳으로 알려주세요. 예: 서울역'
-              : '목적 한두 가지를 다시 알려주세요. 예: 카페, 산책'
-      if (clarification) {
-        updateTrip((t) => {
-          t.pendingChat = {
-            patch,
-            need:
-              parsed.need ||
-              (!candidate.departure
-                ? 'departure'
-                : !candidate.purposes.length
-                  ? 'purposes'
-                  : pending?.need),
-          }
-          message(t, clarification!, { fallback: true })
-        })
-        return
-      }
-      updateTrip((t) => {
-        t.pendingChat = null
-      })
-      await search(candidate, true)
-    } catch {
-      if (id !== request.current || getTrip().trip !== tripId) return
-      patchUI({
-        busy: false,
-        progress: null,
-        chatFailure: { tripId, text: text.trim() },
-      })
+    })
+    patchUI({ apiFailure: null, notice: null })
+    notify('출발지와 원하는 조건을 다시 입력해 주세요. 기존 조건과 추천은 유지돼요.')
+  }
+  function askSelectedPlace(text: string) {
+    const result = getResult(),
+      selected = getTrip().selected
+    if (!result?.api || !selected || !result.api.result.context_token) {
+      notify('추천 목록에서 질문할 장소를 먼저 선택해 주세요.')
+      return Promise.resolve(false)
     }
+    return submitChat(text, {
+      target: {
+        result_id: result.id,
+        place_id: selected,
+        context_token: result.api.result.context_token,
+      },
+    })
   }
 
   function toggleLayer(key: keyof Layers) {
@@ -652,6 +939,7 @@ export function useDemoController() {
     }
     const saved: SavedTrip = {
       id,
+      ...(trip.api ? { api: structuredClone(trip.api) } : {}),
       sourceTripId: trip.trip,
       title:
         trip.title ||
@@ -660,6 +948,7 @@ export function useDemoController() {
       result: structuredClone(displayed),
       selectedId: trip.selected,
       parkingSelections: structuredClone(trip.parkingSelections || {}),
+      parkingDetails: structuredClone(trip.parkingDetails || {}),
       general: trip.general?.id === displayed.id,
       layers: structuredClone(trip.workspaceView?.layers || defaultLayers),
     }
@@ -693,7 +982,7 @@ export function useDemoController() {
       return
     }
     preserveWorkspace()
-    request.current++
+    invalidateRequests()
     retry.current = null
     updateStore((draft) => {
       let trip = draft.trips.find((t) => t.trip === saved.sourceTripId)
@@ -705,10 +994,25 @@ export function useDemoController() {
       }
       const restored = structuredClone(saved.result)
       trip.parkingSelections = structuredClone(saved.parkingSelections || {})
-      trip.conditions = structuredClone(restored.conditions)
-      trip.onboardingDraft = structuredClone(restored.conditions)
+      trip.parkingDetails = structuredClone(saved.parkingDetails || {})
+      if (restored.api) {
+        trip.api ??= structuredClone(
+          saved.api || {
+            tripId: restored.api.tripId,
+            version: restored.api.conditionVersion,
+            seenPlaceIds: saved.general ? [] : restored.entries.map((entry) => entry.id),
+            conditions: restored.api.result.conditions,
+            clarification: null,
+          },
+        )
+      }
+      trip.conditions = trip.api
+        ? displayConditions(trip.api.conditions)
+        : structuredClone(restored.conditions)
+      trip.onboardingDraft = structuredClone(trip.conditions)
       trip.onboardingComplete = true
-      trip.conditionVersion++
+      if (trip.api) trip.conditionVersion = trip.api.version
+      else trip.conditionVersion++
       trip.pendingChat = null
       trip.retainedResult = null
       trip.selected = restored.entries.some((entry) => entry.id === saved.selectedId)
@@ -778,10 +1082,13 @@ export function useDemoController() {
     openDetail,
     retryRoute,
     submitChat,
-    retryChat: () => {
-      const failure = ui.chatFailure
-      if (failure?.tripId === getTrip().trip) return submitChat(failure.text, true)
-    },
+    askSelectedPlace,
+    restartExpiredOrigin,
+    recommendFromApi,
+    retryApiRequest,
+    submitRecommendation,
+    recommendMore,
+    retryRecommendation,
     toggleLayer,
     saveMap,
     exclude,
@@ -793,10 +1100,16 @@ export function useDemoController() {
       }),
     showChat,
     retrySearch: () => retry.current && search(retry.current.conditions, retry.current.fromChat),
-    selectParking: (placeId: string, parkingId: string) => {
+    selectParking: (
+      placeId: string,
+      parkingId: string,
+      facility?: import('./parking/facilities').ParkingFacility,
+    ) => {
       if (!getResult()?.entries.some((entry) => entry.id === placeId)) return
       updateTrip((t) => {
         t.parkingSelections = { ...t.parkingSelections, [placeId]: parkingId }
+        if (facility?.id === parkingId)
+          t.parkingDetails = { ...t.parkingDetails, [parkingId]: structuredClone(facility) }
       })
       notify('이 장소에서 이용할 주차장을 선택했어요.')
     },

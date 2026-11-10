@@ -3,7 +3,8 @@ import { routeTrafficColor } from '../routing/traffic'
 import { arrowHtml, endpointHtml, routeArrows } from '../routing/mapSymbols'
 import { SEOUL_VIEW_BOUNDS } from '../data/seoulBoundary'
 import markerIcons from '../data/icons.json'
-import { loadSeoulMapData } from '../data/seoulMapData'
+import { useRoadTraffic } from '../live/useRoadTraffic'
+import { SEOUL_QUERY, type MapQuery } from '../../api/queries'
 import { useParkingData } from '../parking/useParkingData'
 import { resolveParkingPopup } from '../parking/popup'
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
@@ -66,18 +67,34 @@ function LeafletGeoMap({
   const markers = useRef<Map<string, ReturnType<typeof L.marker>>>(new Map())
   const [status, setStatus] = useState('서울 지도를 불러오는 중이에요…')
   const [zoom, setZoom] = useState(12)
+  const [viewport, setViewport] = useState<MapQuery>(SEOUL_QUERY)
   const [routing, setRouting] = useState(() => !!getMapOverlay().route?.length)
+  const { roads: cityTraffic, error: roadError } = useRoadTraffic(viewport, layers.roads || routing)
   const retryTiles = useRef<() => void>(() => {})
-  const [popup, setPopup] = useState<{ record: RecordData; host: HTMLDivElement } | null>(null)
+  const [popup, setPopup] = useState<{
+    record: RecordData
+    host: HTMLDivElement
+  } | null>(null)
   const [parkingHint, setParkingHint] = useState(false)
   const zoomToParking = useRef<() => void>(() => {})
   const resultSnapshot = JSON.stringify(preview ? null : result)
   const mapResult = useMemo<Result | null>(() => JSON.parse(resultSnapshot), [resultSnapshot])
   const departure = preview ? null : (result?.conditions || active.conditions).departure
+  const selectedLatitude = placeById(active.selected, result)?.lat
+  const selectedLongitude = placeById(active.selected, result)?.lon
   const onView = useEffectEvent(() => {
     const instance = map.current
     if (instance) {
       const center = instance.getCenter()
+      const bounds = instance.getBounds()
+      const query: MapQuery = {
+        bbox: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].map(
+          (v: number) => Number(v.toFixed(5)),
+        ) as MapQuery['bbox'],
+        level: Math.max(1, 20 - instance.getZoom()),
+      }
+      setViewport((old) => (JSON.stringify(old) === JSON.stringify(query) ? old : query))
+      parkingData.setViewport(query)
       saveMap({
         center: [center.lat, center.lng],
         zoom: instance.getZoom(),
@@ -90,7 +107,10 @@ function LeafletGeoMap({
   const onHover = useEffectEvent((id: string | null) => patchUI({ hover: id }))
   useEffect(() => {
     const instance = map.current
-    const place = placeById(active.selected)
+    const place =
+      selectedLatitude === undefined || selectedLongitude === undefined
+        ? null
+        : { lat: selectedLatitude, lon: selectedLongitude }
     if (!instance || !place) return
     if (!matchMedia('(max-width:900px)').matches) {
       // Desktop: bring the chosen destination into view without zooming out.
@@ -122,8 +142,10 @@ function LeafletGeoMap({
       [target.x, target.y + (sheet?.offsetHeight ?? 300) / 2],
       instance.getZoom(),
     )
-    instance.panTo(shifted, { animate: !matchMedia('(prefers-reduced-motion: reduce)').matches })
-  }, [active.selected])
+    instance.panTo(shifted, {
+      animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
+    })
+  }, [active.selected, selectedLatitude, selectedLongitude])
   useEffect(() => {
     let group: ReturnType<typeof L.layerGroup> | null = null
     const draw = (overlay: MapOverlay) => {
@@ -269,7 +291,9 @@ function LeafletGeoMap({
     })
     map.current = instance
     const view = initialView.current
-    instance.setView(view?.center || [37.5665, 126.978], view?.zoom || 12, { animate: false })
+    instance.setView(view?.center || [37.5665, 126.978], view?.zoom || 12, {
+      animate: false,
+    })
     instance.attributionControl.setPrefix(
       '<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>',
     )
@@ -302,6 +326,7 @@ function LeafletGeoMap({
     })
     const stopLive = startLive()
     instance.on('moveend zoomend', onView)
+    onView()
     const resize = () => {
       if (root.current?.clientWidth && root.current.clientHeight) {
         instance.setMinZoom(matchMedia('(max-width:900px)').matches ? 10 : 11)
@@ -357,7 +382,12 @@ function LeafletGeoMap({
   useEffect(() => {
     const instance = map.current
     if (!instance) return
-    const origin = departure ? DEPARTURES[departure] : null
+    const originCoordinates = mapResult?.conditions.origin?.coordinates
+    const origin = originCoordinates
+      ? { lat: originCoordinates.latitude, lon: originCoordinates.longitude }
+      : departure
+        ? DEPARTURES[departure]
+        : null
     const group = L.layerGroup().addTo(instance)
     const currentMarkers = markers.current
     currentMarkers.clear()
@@ -387,7 +417,7 @@ function LeafletGeoMap({
       )
     }
     for (const entry of mapResult?.entries || []) {
-      const place = placeById(entry.id)
+      const place = placeById(entry.id, mapResult)
       if (!place) continue
       coordinates.push([place.lat, place.lon])
       const number = document.createElement('span')
@@ -464,7 +494,11 @@ function LeafletGeoMap({
     if (!instance) return
     let controller: ReturnType<typeof createMapLayers> | undefined
     let cancelled = false
-    void loadSeoulMapData()
+    void Promise.resolve({
+      roads: cityTraffic,
+      population: { features: [] },
+      parking: [],
+    })
       .then((data) => {
         if (cancelled) return
         controller = createMapLayers(instance, {
@@ -499,7 +533,7 @@ function LeafletGeoMap({
       parkingController.current = null
       controller?.destroy()
     }
-  }, [mapResult, roads, parking, population, preview])
+  }, [mapResult, roads, parking, population, preview, cityTraffic])
   useEffect(() => {
     for (const [id, marker] of markers.current) {
       const element: HTMLElement | undefined = marker.getElement()
@@ -540,7 +574,7 @@ function LeafletGeoMap({
     const update = () => {
       arrows.clearLayers()
       const path = getMapOverlay().route
-      if (!path?.length) return
+      if (!path?.length || (getMapOverlay().routeSegments?.length || 0) > 1) return
       const size = instance.getSize()
       for (const mark of routeArrows(
         path,
@@ -670,6 +704,11 @@ function LeafletGeoMap({
           <Icon name="fit" />
         </button>
       </div>
+      {roadError && (
+        <p role="status" className="sn-banner">
+          {roadError}
+        </p>
+      )}
       {parkingHint && (!preview || parkingHintRequested) && (
         <button className="map-parking-zoom-hint" onClick={() => zoomToParking.current()}>
           <Icon name="parking" /> {preview ? '확대해서 주차장 보기' : '추천 주변 주차장 보기'}

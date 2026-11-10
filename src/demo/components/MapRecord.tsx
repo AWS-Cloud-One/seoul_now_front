@@ -1,3 +1,5 @@
+import InformationMeta from './InformationMeta'
+import ParkingRegistration from './ParkingRegistration'
 import type { MapRecord as RecordData, ParkingRecord } from '../mapLayers'
 import { dateLabel } from '../domain.js'
 import type { ReactNode } from 'react'
@@ -29,7 +31,7 @@ function Shell({
     <article className="map-record">
       <header>
         <span>{kind}</span>
-        <span className="map-record-snapshot">저장 자료</span>
+        <span className="map-record-snapshot">관측·등록 자료</span>
       </header>
       <h3>{title}</h3>
       {children}
@@ -88,6 +90,7 @@ export default function MapRecord({
             </div>
           </dl>
         )}
+        {road.information && <InformationMeta information={road.information} />}
         {!road.live && <p className="map-record-note">저장된 교통 관측 자료예요.</p>}
       </Shell>
     )
@@ -108,6 +111,7 @@ export default function MapRecord({
           </>
         }
       >
+        {record.data.information && <InformationMeta information={record.data.information} />}
         <span className="population-status">{population.congestion || '미확인'}</span>
         <div className="map-record-metric population-metric">
           <span>관측 구역 내 추정 인구</span>
@@ -168,6 +172,7 @@ export default function MapRecord({
         <p className="map-record-note">다른 주차장을 선택해 주세요.</p>
       </Shell>
     )
+  if (parking.api) return <ParkingRegistration key={parking.id} lot={parking} />
   const fee =
     parking.baseRate && parking.baseRate.amount != null && parking.baseRate.minutes
       ? `${number(parking.baseRate.minutes)}분 ${number(parking.baseRate.amount)}원`

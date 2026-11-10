@@ -48,11 +48,13 @@ export function LayerMenu() {
           </button>
         ))}
       </div>
-      {layers.population && !live.places.some((place) => !place.stale) && live.savedPlaces.length > 0 && (
-        <p className="sn-population-status" role="status">
-          저장된 유동인구 관측을 표시하고 있어요.
-        </p>
-      )}
+      {layers.population &&
+        !live.places.some((place) => !place.stale) &&
+        live.savedPlaces.length > 0 && (
+          <p className="sn-population-status" role="status">
+            현재 유효한 인구 관측을 확인하지 못했어요. 구역 위치만 표시해요.
+          </p>
+        )}
       {layers.population && live.status === 'error' && !live.savedPlaces.length && (
         <p className="sn-population-status" role="status">
           유동인구 데이터를 불러오지 못했어요.
@@ -172,13 +174,19 @@ export function SelectionSummary({
   const { wide } = useLayout()
   const { active, result, ui, selectPlace } = useDemo()
   const parking = useSelectedParking(active.selected)
-  const place = placeById(active.selected)
+  const place = placeById(active.selected, result)
   const entry = result?.entries.find((e) => e.id === active.selected)
   if (!place || !entry || !result || ui.detail) return null
   // Never both at once: the map card when the panel is narrow, the panel block when it is wide.
   if (variant === 'map' ? wide : !wide) return null
   const number = result.entries.indexOf(entry) + 1
-  const origin = active.conditions.departure ? DEPARTURES[active.conditions.departure] : undefined
+  const conditions = result.conditions
+  const coordinates = conditions.origin?.coordinates
+  const origin = coordinates
+    ? { lat: coordinates.latitude, lon: coordinates.longitude }
+    : conditions.departure
+      ? DEPARTURES[conditions.departure]
+      : undefined
   return (
     <section
       className={variant === 'map' ? 'sn-glass sn-summary-card' : 'sn-selected-inline'}

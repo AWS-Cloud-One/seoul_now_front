@@ -2,12 +2,12 @@ import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { ParkingContext } from './context'
 import { createParkingStore } from './store'
-import { mockParkingSource } from './source'
+import { apiParkingSource } from './source'
 import type { ParkingSource } from './types'
 export default function ParkingProvider({
   children,
-  source = mockParkingSource,
-  refreshInterval = 30000,
+  source = apiParkingSource,
+  refreshInterval = 60000,
 }: {
   children: ReactNode
   source?: ParkingSource

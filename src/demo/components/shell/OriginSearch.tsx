@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { searchPlaces, type FoundPlace } from '../../routing/api'
+import { foundPlace } from '../../routing/api'
+import { usePages } from '../../../api/usePages'
+import type { FoundPlaceData } from '../../../api/queries'
 import Icon from '../Icon'
 import { SearchField, SecondaryButton } from './ui'
 import type { Target } from './RouteSections'
@@ -12,9 +14,13 @@ export default function OriginSearch({
   onChange: (place: Target | null) => void
 }) {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<FoundPlace[]>([])
+  const search = usePages<FoundPlaceData>(
+    '/locations/places/search',
+    { query: query.trim(), limit: 10 },
+    !value && query.trim().length >= 2,
+  )
+  const results = search.items.map(foundPlace)
   const [status, setStatus] = useState('')
-  const [retry, setRetry] = useState(0)
   const locationRequest = useRef(0)
   useEffect(
     () => () => {
@@ -22,36 +28,13 @@ export default function OriginSearch({
     },
     [],
   )
-  useEffect(() => {
-    if (value || query.trim().length < 2) return
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      setStatus('출발지를 찾는 중이에요…')
-      searchPlaces(query.trim(), controller.signal).then(
-        (places) => {
-          if (controller.signal.aborted) return
-          setResults(places)
-          setStatus(places.length ? '' : '검색 결과가 없어요. 다른 이름으로 찾아보세요.')
-        },
-        () => {
-          if (!controller.signal.aborted) setStatus('출발지 검색에 실패했어요. 다시 시도해 주세요.')
-        },
-      )
-    }, 350)
-    return () => {
-      window.clearTimeout(timer)
-      controller.abort()
-    }
-  }, [query, value, retry])
   const choose = (place: Target) => {
     locationRequest.current++
     setStatus('')
-    setResults([])
     onChange(place)
   }
   const locate = () => {
     const request = ++locationRequest.current
-    setResults([])
     setQuery('')
     if (!navigator.geolocation) {
       setStatus('이 브라우저는 위치 기능을 지원하지 않아요. 장소 이름으로 검색해 주세요.')
@@ -102,7 +85,6 @@ export default function OriginSearch({
             onChange={(text) => {
               locationRequest.current++
               setQuery(text)
-              setResults([])
               setStatus('')
             }}
           />
@@ -134,9 +116,23 @@ export default function OriginSearch({
               {status}
             </p>
           )}
-          {status.includes('검색에 실패') && (
-            <SecondaryButton onClick={() => setRetry((value) => value + 1)}>
+          {search.busy && query.trim().length >= 2 && <p role="status">출발지를 찾고 있어요…</p>}
+          {search.page && !search.busy && !search.error && results.length === 0 && (
+            <p>검색 결과가 없어요. 다른 이름으로 찾아보세요.</p>
+          )}
+          {search.error && <p role="alert">{search.error}</p>}
+          {search.wait > 0 && <p>{search.wait}초 후 다시 조회할 수 있어요.</p>}
+          {search.error && (
+            <SecondaryButton disabled={search.wait > 0} onClick={search.refresh}>
               출발지 검색 다시 시도
+            </SecondaryButton>
+          )}
+          {search.page?.next_cursor && (
+            <SecondaryButton
+              disabled={search.busy || search.wait > 0 || search.expired}
+              onClick={search.more}
+            >
+              출발지 더 보기
             </SecondaryButton>
           )}
         </>

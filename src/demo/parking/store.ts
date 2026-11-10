@@ -1,8 +1,14 @@
+import { QueryError, SEOUL_QUERY, type MapQuery } from '../../api/queries'
+import type { ParkingLot } from './types'
 import { normalizeParkingResponse } from './normalize'
 import { parkingFacilities } from './facilities'
 import type { ParkingScope, ParkingSnapshot, ParkingSource } from './types'
 
 export function createParkingStore(source: ParkingSource, refreshInterval = 30000) {
+  let viewport = SEOUL_QUERY
+  const remembered = new Map<string, ParkingLot>()
+  const limited = new Map<ParkingScope, string>()
+  let retryAt = 0
   function initial(scope: ParkingScope): ParkingSnapshot {
     try {
       if (source.initialData?.[scope] !== undefined)
@@ -39,6 +45,7 @@ export function createParkingStore(source: ParkingSource, refreshInterval = 3000
     entry.listeners.forEach((listener) => listener())
   }
   async function refresh(scope: ParkingScope) {
+    if (retryAt > Date.now() || limited.get(scope) === JSON.stringify(viewport)) return
     const entry = entries[scope],
       version = ++entry.version
     entry.controller?.abort()
@@ -49,25 +56,49 @@ export function createParkingStore(source: ParkingSource, refreshInterval = 3000
       status: entry.snapshot.status === 'idle' ? 'loading' : entry.snapshot.status,
     })
     try {
-      const response = await source.load(scope, controller.signal)
+      const response = await source.load(scope, controller.signal, viewport)
       if (entry.version !== version || controller.signal.aborted) return
+      const lots = normalizeParkingResponse(response).map((lot) => remembered.get(lot.id) || lot)
       publish(scope, {
-        lots: parkingFacilities(normalizeParkingResponse(response)),
+        lots: parkingFacilities([
+          ...new Map([...lots, ...remembered.values()].map((lot) => [lot.id, lot])).values(),
+        ]),
         status: 'success',
         error: null,
         refreshing: false,
       })
-    } catch {
+    } catch (error) {
       if (entry.version !== version || controller.signal.aborted) return
+      if (error instanceof QueryError) {
+        retryAt = error.retryAt
+        if (error.code === 'MAP_RANGE_TOO_LARGE') limited.set(scope, JSON.stringify(viewport))
+      }
       publish(scope, {
         status: 'error',
-        error: '주차장 정보를 갱신하지 못했어요.',
+        error: error instanceof Error ? error.message : '주차장 정보를 갱신하지 못했어요.',
         refreshing: false,
       })
     }
   }
   return {
     kind: source.kind,
+    setViewport(query: MapQuery) {
+      if (source.kind !== 'api' || JSON.stringify(viewport) === JSON.stringify(query)) return
+      viewport = query
+      if (entries.map.listeners.size) void refresh('map')
+    },
+    remember(lots: ParkingLot[]) {
+      if (!lots.length) return
+      for (const lot of lots) remembered.set(lot.id, lot)
+      // Keep selected/search details across viewport changes; backend facility IDs are authoritative.
+      publish('map', {
+        lots: parkingFacilities([
+          ...new Map(
+            [...entries.map.snapshot.lots, ...remembered.values()].map((lot) => [lot.id, lot]),
+          ).values(),
+        ]),
+      })
+    },
     getSnapshot: (scope: ParkingScope) => entries[scope].snapshot,
     refresh,
     subscribe(scope: ParkingScope, listener: () => void) {
@@ -77,7 +108,7 @@ export function createParkingStore(source: ParkingSource, refreshInterval = 3000
         void refresh(scope)
         if (refreshInterval > 0)
           entry.timer = setInterval(() => {
-            void refresh(scope)
+            if (!document.hidden) void refresh(scope)
           }, refreshInterval)
       }
       return () => {

@@ -1,3 +1,6 @@
+import { mapGeometry } from '../../api/mapLayers'
+import { SEOUL_QUERY } from '../../api/queries'
+import { apiParkingLot } from './api'
 import { loadSeoulMapData } from '../data/seoulMapData'
 import type { ParkingSource } from './types'
 
@@ -56,14 +59,35 @@ export const mockParkingSource: ParkingSource = {
     return { items: data.parking }
   },
 }
-// Enable this source only after the team's endpoint/DTO is agreed. No live endpoint is used today.
-export function createParkingApiSource(endpoint: string): ParkingSource {
-  return {
-    kind: 'api',
-    async load(_scope, signal) {
-      const response = await fetch(endpoint, { signal, headers: { Accept: 'application/json' } })
-      if (!response.ok) throw new Error('주차장 요청에 실패했습니다.')
-      return response.json()
-    },
-  }
+export const apiParkingSource: ParkingSource = {
+  kind: 'api',
+  async load(_scope, signal, query = SEOUL_QUERY) {
+    const data = await mapGeometry('parking', query, signal, true)
+    return data.feature_collection.features.flatMap((feature) =>
+      feature.geometry.type === 'Point'
+        ? [
+            apiParkingLot({
+              parking_id: feature.id,
+              name: feature.properties.name || '이름 미확인',
+              identity_status: feature.properties.identity_status || 'unverified',
+              coordinates: {
+                latitude: feature.geometry.coordinates[1],
+                longitude: feature.geometry.coordinates[0],
+              },
+              distance_meters: 0,
+              records: [],
+              availability: {
+                value: null,
+                status: 'unsupported',
+                freshness: 'not_applicable',
+                source: null,
+                observed_at: null,
+                collected_at: null,
+                reason_code: 'NOT_SUPPORTED',
+              },
+            }),
+          ]
+        : [],
+    )
+  },
 }

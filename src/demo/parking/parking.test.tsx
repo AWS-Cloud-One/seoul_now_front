@@ -1,3 +1,4 @@
+import { QueryError, SEOUL_QUERY } from '../../api/queries'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { normalizeParkingResponse } from './normalize'
@@ -40,11 +41,17 @@ it('응답의 0, 미제공, 잘못된 수치와 중복 ID를 안전하게 구분
   expect(() => normalizeParkingResponse([{}])).toThrow()
 })
 it('지도와 조회 목록에 같은 시설의 주차 구획을 한 건으로 제공한다', async () => {
-  const shared = { ...row, code: '123', address: '미아동 458-7', source: 'public', totalSpaces: 1, availableSpaces: 0 }
-  const load = vi.fn().mockResolvedValue([
-    shared,
-    { ...shared, id: 'bay-two', lat: row.lat + 0.00005 },
-  ])
+  const shared = {
+    ...row,
+    code: '123',
+    address: '미아동 458-7',
+    source: 'public',
+    totalSpaces: 1,
+    availableSpaces: 0,
+  }
+  const load = vi
+    .fn()
+    .mockResolvedValue([shared, { ...shared, id: 'bay-two', lat: row.lat + 0.00005 }])
   const store = createParkingStore({ kind: 'api', load })
   await store.refresh('map')
   expect(store.getSnapshot('map').lots).toMatchObject([
@@ -151,8 +158,31 @@ it('열린 주차장 목록에서 이전 ID 두 개가 같은 시설로 합쳐�
   const [first, second] = normalizeParkingResponse([row, { ...row, id: 'second' }])
   const location = { lat: row.lat, lng: row.lng, records: [first, second] }
   const result = resolveParkingPopup(
-    { kind: 'parking-cluster', data: [{ location, record: first }, { location, record: second }] },
+    {
+      kind: 'parking-cluster',
+      data: [
+        { location, record: first },
+        { location, record: second },
+      ],
+    },
     [{ ...first, memberIds: [first.id, second.id] }],
   )
-  expect(result.kind === 'parking-cluster' && result.data.map((item) => item.record.id)).toEqual([first.id])
+  expect(result.kind === 'parking-cluster' && result.data.map((item) => item.record.id)).toEqual([
+    first.id,
+  ])
+})
+
+it('범위 초과 응답 뒤 같은 화면 범위를 폴링하지 않고 확대 후 다시 조회한다', async () => {
+  const load = vi
+    .fn()
+    .mockRejectedValueOnce(new QueryError('범위를 줄여 주세요.', 422, 'MAP_RANGE_TOO_LARGE'))
+    .mockResolvedValue([])
+  const store = createParkingStore({ kind: 'api', load }, 0)
+  await store.refresh('map')
+  await store.refresh('map')
+  expect(load).toHaveBeenCalledTimes(1)
+  store.setViewport({ ...SEOUL_QUERY, level: 5 })
+  await store.refresh('map')
+  expect(load).toHaveBeenCalledTimes(2)
+  expect(store.getSnapshot('map').status).toBe('success')
 })

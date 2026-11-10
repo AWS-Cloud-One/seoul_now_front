@@ -12,6 +12,7 @@ import {
   type LivePlace,
 } from '../../live/store'
 import Icon from '../Icon'
+import InformationMeta from '../InformationMeta'
 import { NearbyShopsSection, RouteSection } from './RouteSections'
 import {
   EmptyState,
@@ -38,7 +39,7 @@ const range = (place: LivePlace) =>
 /** Provider timestamps are Korea time without a zone. */
 function minutesSince(value: string | null) {
   if (!value) return null
-  const time = Date.parse(`${value.replace(' ', 'T')}:00+09:00`)
+  const time = Date.parse(value.includes('T') ? value : `${value.replace(' ', 'T')}:00+09:00`)
   return Number.isFinite(time) ? Math.max(0, Math.round((Date.now() - time) / 60000)) : null
 }
 
@@ -85,6 +86,7 @@ function LiveDetailView({ place, go }: { place: LivePlace; go: (route: Route) =>
             {age !== null && age > 60 && ` · ${Math.floor(age / 60)}시간 이상 지난 값`}
           </p>
         </section>
+        {place.information && <InformationMeta information={place.information} />}
         {state.status === 'loading' ? (
           <LoadingSkeleton rows={3} />
         ) : state.status === 'error' ? (
@@ -109,7 +111,12 @@ function LiveDetailView({ place, go }: { place: LivePlace; go: (route: Route) =>
           key={`s-${place.code}`}
           place={{ id: place.code, name: place.name, lat: place.lat, lon: place.lng }}
         />
-        <SecondaryButton onClick={() => go('parking')}>
+        <SecondaryButton
+          onClick={() => {
+            setMapOverlay({ parkingBase: { name: place.name, lat: place.lat, lng: place.lng } })
+            go('parking')
+          }}
+        >
           <Icon name="parking" />
           주변 주차장 보기
         </SecondaryButton>
@@ -133,6 +140,17 @@ function DetailBody({ detail }: { detail: LiveDetail }) {
     <>
       <section className="sn-section" aria-labelledby="sn-l-road">
         <h3 id="sn-l-road">도로 소통</h3>
+        {detail.information?.roads.value?.items.map((item) => (
+          <div key={item.link_id}>
+            <p>
+              도로 {item.link_id} ·{' '}
+              {item.traffic.status === 'available' && item.traffic.value?.speed_kmh != null
+                ? `${item.traffic.value?.speed_kmh}km/h`
+                : '속도 미확인'}
+            </p>
+            <InformationMeta information={item.traffic} />
+          </div>
+        ))}
         {detail.road.level ? (
           <>
             <p>
@@ -164,7 +182,9 @@ function DetailBody({ detail }: { detail: LiveDetail }) {
             <p className="sn-note">지도에 구간별 소통 상태가 표시돼요. {detail.road.time}</p>
           </>
         ) : (
-          <p>도로 소통 정보가 제공되지 않았어요.</p>
+          !detail.information?.roads.value?.items.length && (
+            <p>도로 소통 정보가 제공되지 않았어요.</p>
+          )
         )}
       </section>
       <section className="sn-section" aria-labelledby="sn-l-shop">
@@ -204,7 +224,7 @@ function DetailBody({ detail }: { detail: LiveDetail }) {
       </section>
       <section className="sn-section" aria-labelledby="sn-l-prk">
         <h3 id="sn-l-prk">주차</h3>
-        {detail.parking.total ? (
+        {detail.parking.total !== null ? (
           <>
             <p>등록된 주차장 {detail.parking.total}개</p>
             <ul className="sn-plain">
@@ -224,14 +244,35 @@ function DetailBody({ detail }: { detail: LiveDetail }) {
               ))}
             </ul>
             <p className="sn-note">
-              잔여 대수는 제공되는 주차장에만 표시돼요. 외부 차량 이용 가능 여부와 영업시간은
-              확인되지 않으니 방문 전 확인하세요.
+              등록 시설 수는 현재 빈자리가 아니에요. 빈자리와 외부 차량 이용 가능 여부는
+              미확인입니다.
             </p>
           </>
         ) : (
           <p>이 구역에 연결된 주차장 정보가 없어요.</p>
         )}
       </section>
+      {detail.information && (
+        <details className="sn-section">
+          <summary>관측 자료 출처</summary>
+          {(['population', 'roads', 'parking', 'commerce', 'weather'] as const).map((key) => (
+            <div key={key}>
+              <strong>
+                {
+                  {
+                    population: '인구',
+                    roads: '도로',
+                    parking: '주차',
+                    commerce: '상권',
+                    weather: '날씨',
+                  }[key]
+                }
+              </strong>
+              <InformationMeta information={detail.information![key]} />
+            </div>
+          ))}
+        </details>
+      )}
       {detail.weather && (
         <section className="sn-section" aria-labelledby="sn-l-wx">
           <h3 id="sn-l-wx">날씨</h3>
@@ -310,6 +351,9 @@ export function HomePanel({ go }: { go: (route: Route) => void }) {
             </FilterChip>
           ))}
         </div>
+        {live.error && live.places.length > 0 && (
+          <p role="status">{live.error} 기존 위치를 유지하며 현재 값은 미확인으로 표시해요.</p>
+        )}
         {live.status === 'loading' && !live.places.length ? (
           <LoadingSkeleton rows={4} />
         ) : live.status === 'error' && !live.places.length ? (

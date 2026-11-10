@@ -7,7 +7,9 @@ import {
   useLive,
   type LiveDetail,
 } from '../../live/store'
-import { searchPlaces, type FoundPlace } from '../../routing/api'
+import { foundPlace } from '../../routing/api'
+import { usePages } from '../../../api/usePages'
+import type { FoundPlaceData } from '../../../api/queries'
 import Icon from '../Icon'
 import { NearbyShopsSection, RouteSection, type Target } from './RouteSections'
 import { EmptyState, PanelHeader, SearchField, SecondaryButton, StatusBadge } from './ui'
@@ -71,37 +73,27 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
   const [origin, setOrigin] = useState<Target | null>(null)
   const [query, setQuery] = useState('')
   const [dest, setDest] = useState<Destination | null>(null)
-  const [found, setFound] = useState<
-    | { status: 'idle' }
-    | { status: 'loading' }
-    | { status: 'done'; data: FoundPlace[] }
-    | { status: 'error'; message: string }
-  >({ status: 'idle' })
+  const search = usePages<FoundPlaceData>(
+    '/locations/places/search',
+    { query: query.trim(), limit: 10 },
+    !dest && query.trim().length >= 2,
+  )
+  const found = {
+    status:
+      search.busy && !search.items.length
+        ? 'loading'
+        : search.error && !search.items.length
+          ? 'error'
+          : 'done',
+    data: search.items.map(foundPlace),
+    message: search.error,
+  }
 
   const livePlaces = useMemo(
     () =>
       query.trim() ? live.places.filter((p) => p.name.includes(query.trim())).slice(0, 5) : [],
     [live.places, query],
   )
-  // Any place name: debounce, then ask Kakao keyword search.
-  useEffect(() => {
-    const text = query.trim()
-    if (text.length < 2) return
-    const controller = new AbortController()
-    const timer = setTimeout(() => {
-      setFound({ status: 'loading' })
-      searchPlaces(text, controller.signal).then(
-        (data) => !controller.signal.aborted && setFound({ status: 'done', data }),
-        (error: Error) =>
-          !controller.signal.aborted && setFound({ status: 'error', message: error.message }),
-      )
-    }, 350)
-    return () => {
-      clearTimeout(timer)
-      controller.abort()
-    }
-  }, [query])
-
   const choose = (next: Destination) => {
     setDest(next)
     setMapOverlay({ destination: { name: next.name, lat: next.lat, lng: next.lon } })
@@ -131,7 +123,6 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
                   setDest(null)
                   setMapOverlay({ destination: null })
                   setQuery('')
-                  setFound({ status: 'idle' })
                 }}
               >
                 바꾸기
@@ -143,7 +134,6 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
                 value={query}
                 onChange={(value) => {
                   setQuery(value)
-                  if (value.trim().length < 2) setFound({ status: 'idle' })
                 }}
                 label="도착지 검색"
                 placeholder="가고 싶은 곳 (예: 강남역, 경복궁, 성수 카페)"
@@ -207,14 +197,34 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
                 </ul>
               )}
               {found.status === 'loading' && <p className="sn-note">장소를 찾는 중이에요…</p>}
-              {found.status === 'error' && <p className="sn-note">{found.message}</p>}
-              {found.status === 'done' && !found.data.length && !livePlaces.length && (
-                <EmptyState title="검색 결과가 없어요">다른 이름으로 찾아보세요.</EmptyState>
+              {search.error && (
+                <p role="alert" className="sn-note">
+                  {search.error}
+                </p>
+              )}
+              {searching &&
+                query.trim().length >= 2 &&
+                found.status === 'done' &&
+                !found.data.length &&
+                !livePlaces.length && (
+                  <EmptyState title="검색 결과가 없어요">다른 이름으로 찾아보세요.</EmptyState>
+                )}
+              {search.wait > 0 && <p>{search.wait}초 후 다시 조회할 수 있어요.</p>}
+              {search.error && (
+                <SecondaryButton disabled={search.wait > 0} onClick={search.refresh}>
+                  도착지 검색 다시 시도
+                </SecondaryButton>
+              )}
+              {search.page?.next_cursor && (
+                <SecondaryButton
+                  disabled={search.busy || search.wait > 0 || search.expired}
+                  onClick={search.more}
+                >
+                  도착지 더 보기
+                </SecondaryButton>
               )}
               {!searching && (
-                <p className="sn-note">
-                  서울 실시간 장소(121곳)는 혼잡도·도로 소통도 함께 보여줘요.
-                </p>
+                <p className="sn-note">서울 인구 관측 구역은 혼잡도·도로 소통도 함께 보여줘요.</p>
               )}
             </>
           )}
@@ -238,7 +248,12 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
               key={`shops-${dest.id}`}
               place={{ id: dest.id, name: dest.name, lat: dest.lat, lon: dest.lon }}
             />
-            <SecondaryButton onClick={() => go('parking')}>
+            <SecondaryButton
+              onClick={() => {
+                setMapOverlay({ parkingBase: { name: dest.name, lat: dest.lat, lng: dest.lon } })
+                go('parking')
+              }}
+            >
               <Icon name="parking" />
               도착지 주변 주차장 보기
             </SecondaryButton>

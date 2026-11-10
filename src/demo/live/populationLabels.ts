@@ -10,6 +10,7 @@ export function livePopulationRecord(
     kind: 'population',
     data: {
       live: !place.saved,
+      information: place.information,
       lat,
       lng,
       properties: {

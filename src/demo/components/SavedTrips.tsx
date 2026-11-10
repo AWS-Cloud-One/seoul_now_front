@@ -101,7 +101,7 @@ export default function SavedTrips() {
                       {saved.result.entries.map((entry, index) => (
                         <span key={entry.id}>
                           <b>{index + 1}</b>
-                          {placeById(entry.id)?.name}
+                          {placeById(entry.id, saved.result)?.name}
                         </span>
                       ))}
                     </span>
