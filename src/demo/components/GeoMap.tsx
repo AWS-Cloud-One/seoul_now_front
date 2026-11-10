@@ -1,11 +1,10 @@
 import KakaoGeoMap from './KakaoGeoMap'
-import { colorRouteByRoads, ROUTE_OUTLINE_COLOR } from '../routing/roadTraffic'
 import {
   arrowHtml,
   endpointHtml,
   routeArrows,
   routeLineWidths,
-  ROUTE_BACKDROP,
+  ROUTE_COLOR,
 } from '../routing/mapSymbols'
 import { SEOUL_VIEW_BOUNDS } from '../data/seoulBoundary'
 import markerIcons from '../data/icons.json'
@@ -73,22 +72,13 @@ function LeafletGeoMap({
   const markers = useRef<Map<string, ReturnType<typeof L.marker>>>(new Map())
   const [status, setStatus] = useState('서울 지도를 불러오는 중이에요…')
   const [zoom, setZoom] = useState(12)
-  const routeLines = useRef<{ line: ReturnType<typeof L.polyline>; outline: boolean }[]>([])
+  const routeLines = useRef<ReturnType<typeof L.polyline>[]>([])
   useEffect(() => {
-    const widths = routeLineWidths(zoom)
-    routeLines.current.forEach(({ line, outline }) =>
-      line.setStyle({ weight: outline ? widths.outline : widths.line }),
-    )
+    const weight = routeLineWidths(zoom).line
+    routeLines.current.forEach((line) => line.setStyle({ weight }))
   }, [zoom])
   const [viewport, setViewport] = useState<MapQuery>(SEOUL_QUERY)
-  const [routing, setRouting] = useState(() => !!getMapOverlay().route?.length)
-  const { roads: cityTraffic, error: roadError } = useRoadTraffic(viewport, layers.roads || routing)
-  const routeRoads = useRef(cityTraffic)
-  const redrawRoute = useRef<(() => void) | null>(null)
-  useEffect(() => {
-    routeRoads.current = cityTraffic
-    redrawRoute.current?.()
-  }, [cityTraffic])
+  const { roads: cityTraffic, error: roadError } = useRoadTraffic(viewport, layers.roads)
   const retryTiles = useRef<() => void>(() => {})
   const [popup, setPopup] = useState<{ record: RecordData; host: HTMLDivElement } | null>(null)
   const [parkingHint, setParkingHint] = useState(false)
@@ -162,7 +152,7 @@ function LeafletGeoMap({
   }, [active.selected, selectedLatitude, selectedLongitude])
   useEffect(() => {
     let group: ReturnType<typeof L.layerGroup> | null = null
-    const draw = (overlay: MapOverlay, fit = true) => {
+    const draw = (overlay: MapOverlay) => {
       const instance = map.current
       if (!instance) return
       group?.remove()
@@ -171,42 +161,20 @@ function LeafletGeoMap({
       if (!overlay.route?.length && !overlay.food?.length) return
       group = L.layerGroup().addTo(instance)
       if (overlay.route?.length) {
-        // Above base tiles, below all data layers and route markers.
-        if (!instance.getPane('sn-route-backdrop'))
-          instance.createPane('sn-route-backdrop').style.zIndex = '250'
-        L.polygon(ROUTE_BACKDROP.path, {
-          pane: 'sn-route-backdrop',
-          stroke: false,
-          fillColor: ROUTE_BACKDROP.color,
-          fillOpacity: ROUTE_BACKDROP.opacity,
-          interactive: false,
-        }).addTo(group)
-        // Own pane above the observed roads so the route is never buried under them.
         if (!instance.getPane('sn-route')) instance.createPane('sn-route').style.zIndex = '450'
-        const widths = routeLineWidths(instance.getZoom())
-        const addRoute = (path: [number, number][], color: string, outline = false) => {
-          const line = L.polyline(path, {
-            pane: 'sn-route',
-            color,
-            weight: outline ? widths.outline : widths.line,
-            opacity: 1,
-            interactive: false,
-          }).addTo(group!)
-          routeLines.current.push({ line, outline })
-        }
         for (const path of overlay.routeSegments?.length
-          ? overlay.routeSegments.map((s) => s.path)
+          ? overlay.routeSegments.map((segment) => segment.path)
           : [overlay.route]) {
-          addRoute(path, ROUTE_OUTLINE_COLOR, true)
-        }
-        const segments = colorRouteByRoads(
-          overlay.routeSegments?.length
-            ? overlay.routeSegments
-            : [{ path: overlay.route, state: 0 }],
-          routeRoads.current,
-        )
-        for (const segment of segments) {
-          if (segment.path.length > 1) addRoute(segment.path, segment.color)
+          if (path.length < 2) continue
+          routeLines.current.push(
+            L.polyline(path, {
+              pane: 'sn-route',
+              color: ROUTE_COLOR,
+              weight: routeLineWidths(instance.getZoom()).line,
+              opacity: 1,
+              interactive: false,
+            }).addTo(group),
+          )
         }
         if (overlay.origin) {
           const origin = overlay.origin
@@ -235,12 +203,11 @@ function LeafletGeoMap({
           title: '도착 · ' + (destination?.name || '목적지'),
           zIndexOffset: 1800,
         }).addTo(group)
-        if (fit)
-          instance.fitBounds(overlay.route, {
-            paddingTopLeft: [64, 84],
-            paddingBottomRight: [64, bottomPadding()],
-            animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
-          })
+        instance.fitBounds(overlay.route, {
+          paddingTopLeft: [64, 84],
+          paddingBottomRight: [64, bottomPadding()],
+          animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
+        })
       }
       for (const food of overlay.food || []) {
         const marker = L.marker([food.lat, food.lng], {
@@ -264,13 +231,11 @@ function LeafletGeoMap({
       }
     }
     const listener = (event: Event) => draw((event as CustomEvent<MapOverlay>).detail)
-    redrawRoute.current = () => draw(getMapOverlay(), false)
     window.addEventListener('sn:map-overlay', listener)
     draw(getMapOverlay())
     const traffic = (event: Event) => {
       const overlay = (event as CustomEvent<MapOverlay>).detail
-      setRouting(!!overlay.route?.length)
-      liveLayers.current?.setTraffic(overlay.route?.length ? null : overlay.traffic)
+      liveLayers.current?.setTraffic(overlay.traffic)
     }
     window.addEventListener('sn:map-overlay', traffic)
     return () => {
@@ -278,7 +243,6 @@ function LeafletGeoMap({
       window.removeEventListener('sn:map-overlay', traffic)
       group?.remove()
       routeLines.current = []
-      redrawRoute.current = null
     }
   }, [])
   const initialView = useRef(preview ? undefined : active.workspaceView?.map)
@@ -514,7 +478,7 @@ function LeafletGeoMap({
   useEffect(() => {
     if (live.selected) liveLayers.current?.focus(live.selected)
   }, [live.selected])
-  const roads = layers.roads && !routing,
+  const roads = layers.roads,
     parking = layers.parking,
     population = layers.population
   useEffect(() => {

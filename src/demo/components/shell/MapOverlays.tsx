@@ -1,14 +1,13 @@
 import { useSelectedParking } from '../../parking/useSelectedParking'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { DEPARTURES, dateLabel, placeById } from '../../domain.js'
 import { useDemo } from '../../useDemo'
 import { useLayout } from './layout'
 import Icon from '../Icon'
-import { fitMap, getMapOverlay, MAP_OVERLAY_EVENT } from './useRoute'
+import { fitMap } from './useRoute'
 import { useLive } from '../../live/store'
 import { POPULATION_HEAT_COLORS } from '../../live/populationHeat'
 import { ROAD_SPEED_COLORS } from '../../live/roadStyle'
-import { ROUTE_ROAD_COLORS } from '../../routing/roadTraffic'
 import { IconButton, PrimaryButton, SecondaryButton, StatusBadge } from './ui'
 
 const layerOptions = [
@@ -17,20 +16,9 @@ const layerOptions = [
   ['roads', '도로혼잡도', 'car'],
 ] as const
 
-function useRouting() {
-  const [routing, setRouting] = useState(() => !!getMapOverlay().route?.length)
-  useEffect(() => {
-    const update = () => setRouting(!!getMapOverlay().route?.length)
-    window.addEventListener(MAP_OVERLAY_EVENT, update)
-    return () => window.removeEventListener(MAP_OVERLAY_EVENT, update)
-  }, [])
-  return routing
-}
-
 export function LayerMenu() {
   const { layers, toggleLayer } = useDemo()
   const live = useLive()
-  const routing = useRouting()
   return (
     <div className="sn-map-layers">
       <div className="sn-layer-buttons" role="group" aria-label="지도 표시 항목">
@@ -40,13 +28,8 @@ export function LayerMenu() {
             type="button"
             className={'sn-layer-toggle is-' + key}
             aria-label={label + ' 표시'}
-            aria-pressed={layers[key] && !(key === 'roads' && routing)}
-            disabled={key === 'roads' && routing}
-            title={
-              key === 'roads' && routing
-                ? '길찾기 중에는 경로선의 교통 상태만 표시해요'
-                : label + ' 켜기 / 끄기'
-            }
+            aria-pressed={layers[key]}
+            title={label + ' 켜기 / 끄기'}
             onClick={() => toggleLayer(key)}
           >
             <Icon name={icon} />
@@ -77,13 +60,12 @@ export function LayerMenu() {
 
 function useLegend() {
   const { layers } = useDemo()
-  const routing = useRouting()
   // Parking has no colour scale to explain, so it does not appear in the legend.
-  return { layers, routing, any: layers.population || layers.roads || routing }
+  return { layers, any: layers.population || layers.roads }
 }
 
 function LegendGroups() {
-  const { layers, routing } = useLegend()
+  const { layers } = useLegend()
   return (
     <>
       {layers.population && (
@@ -103,11 +85,11 @@ function LegendGroups() {
           </div>
         </section>
       )}
-      {(layers.roads || routing) && (
+      {layers.roads && (
         <section className="sn-lg" aria-label="도로 소통">
-          <h4>{routing ? '경로 위 도로 관측' : '도로 소통'} (km/h)</h4>
+          <h4>도로 소통 (km/h)</h4>
           <ul className="sn-lg-dots">
-            {(routing ? ROUTE_ROAD_COLORS : ROAD_SPEED_COLORS).map(({ color, label }) => (
+            {ROAD_SPEED_COLORS.map(({ color, label }) => (
               <li key={label}>
                 <i style={{ background: color }} />
                 {label}

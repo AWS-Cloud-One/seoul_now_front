@@ -1,7 +1,7 @@
 import type { MapRoadSegment } from '../live/store'
 import { useRoadTraffic } from '../live/useRoadTraffic'
 import { SEOUL_QUERY, type MapQuery } from '../../api/queries'
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { loadKakaoSdk } from '../kakaoSdk'
 import { useDemo } from '../useDemo'
@@ -24,13 +24,12 @@ import { livePopulationRecord } from '../live/populationLabels'
 import { populationHeat, containsPopulationPoint } from '../live/populationHeat'
 import { roadSpeedColor } from '../live/roadStyle'
 import Icon from './Icon'
-import { colorRouteByRoads, ROUTE_OUTLINE_COLOR } from '../routing/roadTraffic'
 import {
   arrowHtml,
   endpointHtml,
   routeArrows,
   routeLineWidths,
-  ROUTE_BACKDROP,
+  ROUTE_COLOR,
 } from '../routing/mapSymbols'
 
 type Drawable = { setMap(map: kakao.maps.Map | null): void }
@@ -79,24 +78,8 @@ export default function KakaoGeoMap({
   const [overlay, setOverlay] = useState<MapOverlay>(getMapOverlay)
   const [viewport, setViewport] = useState<MapQuery>(SEOUL_QUERY)
   const findRoad = useRef<((point: kakao.maps.LatLng) => MapRoadSegment | undefined) | null>(null)
-  const showRoadTraffic = layers.roads && !overlay.route?.length
-  const needsRoadTraffic = layers.roads || !!overlay.route?.length
-  const { roads: cityTraffic, error: roadError } = useRoadTraffic(
-    viewport,
-    ready && needsRoadTraffic,
-  )
-  const coloredRoute = useMemo(
-    () =>
-      colorRouteByRoads(
-        overlay.route?.length
-          ? overlay.routeSegments?.length
-            ? overlay.routeSegments
-            : [{ path: overlay.route, state: 0 }]
-          : [],
-        overlay.route?.length ? cityTraffic : [],
-      ),
-    [overlay.route, overlay.routeSegments, cityTraffic],
-  )
+  const showRoadTraffic = layers.roads
+  const { roads: cityTraffic, error: roadError } = useRoadTraffic(viewport, ready && layers.roads)
   const [focused, setFocused] = useState<string | null>(
     active.parkingSelections?.[active.selected || ''] || null,
   )
@@ -340,19 +323,6 @@ export default function KakaoGeoMap({
     const map = instance.current
     if (!ready || !map) return
     const items: Drawable[] = []
-    const routeLines: { item: kakao.maps.Polyline; outline: boolean }[] = []
-    const line = (path: [number, number][], color: string, weight = 4, zIndex = 5) => {
-      const item = new kakao.maps.Polyline({
-        map,
-        path: path.map((p) => position(...p)),
-        strokeColor: color,
-        strokeWeight: weight,
-        strokeOpacity: 1,
-        zIndex,
-      })
-      items.push(item)
-      return item
-    }
     if (live.boundary?.length) {
       const world = [
         [30, 118],
@@ -370,43 +340,37 @@ export default function KakaoGeoMap({
       })
       items.push(mask)
     }
-    if (overlay.route?.length) {
-      // Below routes and map overlays; the base-map labels remain readable.
-      items.push(
-        new kakao.maps.Polygon({
-          map,
-          path: ROUTE_BACKDROP.path.map((p) => position(...p)),
-          strokeWeight: 0,
-          fillColor: ROUTE_BACKDROP.color,
-          fillOpacity: ROUTE_BACKDROP.opacity,
-          zIndex: -1,
-        }),
+    return () => items.forEach((item) => item.setMap(null))
+  }, [ready, live.boundary])
+  useEffect(() => {
+    const map = instance.current
+    if (!ready || !map || !overlay.route?.length) return
+    const paths = overlay.routeSegments?.length
+      ? overlay.routeSegments.map((segment) => segment.path)
+      : [overlay.route]
+    const lines = paths
+      .filter((path) => path.length > 1)
+      .map(
+        (path) =>
+          new kakao.maps.Polyline({
+            map,
+            path: path.map((point) => position(...point)),
+            strokeColor: ROUTE_COLOR,
+            strokeWeight: routeLineWidths(20 - map.getLevel()).line,
+            strokeOpacity: 1,
+            zIndex: 14,
+          }),
       )
-      for (const path of overlay.routeSegments?.length
-        ? overlay.routeSegments.map((s) => s.path)
-        : [overlay.route]) {
-        routeLines.push({ item: line(path, ROUTE_OUTLINE_COLOR, 4, 14), outline: true })
-      }
-      for (const segment of coloredRoute)
-        if (segment.path.length > 1)
-          routeLines.push({
-            item: line(segment.path, segment.color, 4, 16),
-            outline: false,
-          })
+    const resize = () => {
+      const strokeWeight = routeLineWidths(20 - map.getLevel()).line
+      lines.forEach((line) => line.setOptions({ strokeWeight }))
     }
-    const resizeRoute = () => {
-      const widths = routeLineWidths(20 - map.getLevel())
-      routeLines.forEach(({ item, outline }) =>
-        item.setOptions({ strokeWeight: outline ? widths.outline : widths.line }),
-      )
-    }
-    resizeRoute()
-    kakao.maps.event.addListener(map, 'zoom_changed', resizeRoute)
+    kakao.maps.event.addListener(map, 'zoom_changed', resize)
     return () => {
-      kakao.maps.event.removeListener(map, 'zoom_changed', resizeRoute)
-      items.forEach((item) => item.setMap(null))
+      kakao.maps.event.removeListener(map, 'zoom_changed', resize)
+      lines.forEach((line) => line.setMap(null))
     }
-  }, [ready, live.boundary, overlay.route, overlay.routeSegments, coloredRoute])
+  }, [ready, overlay.route, overlay.routeSegments])
   useEffect(() => {
     const map = instance.current
     if (!ready || !map || !showRoadTraffic) return
@@ -869,7 +833,7 @@ export default function KakaoGeoMap({
           <Icon name="fit" />
         </button>
       </div>
-      {((needsRoadTraffic && roadError) ||
+      {((showRoadTraffic && roadError) ||
         (layers.parking && parking.error) ||
         (layers.population && live.error)) && (
         <p
@@ -877,7 +841,7 @@ export default function KakaoGeoMap({
           role="status"
           style={{ position: 'absolute', bottom: 24, left: 20, zIndex: 20, maxWidth: 320 }}
         >
-          {needsRoadTraffic && roadError
+          {showRoadTraffic && roadError
             ? `도로: ${roadError}`
             : layers.parking && parking.error
               ? `주차 위치: ${parking.error} 지도를 확대해 주세요.`
