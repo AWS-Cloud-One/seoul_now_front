@@ -2,8 +2,14 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 import DirectionsPanel from './DirectionsPanel'
-import { fetchDirections, searchPlaces } from '../../routing/api'
+import { fetchDirections } from '../../routing/api'
 import { getMapOverlay } from './useRoute'
+import { queryApi } from '../../../api/queries'
+import { clearPageCache } from '../../../api/usePages'
+vi.mock('../../../api/queries', async (original) => ({
+  ...(await original<typeof import('../../../api/queries')>()),
+  queryApi: vi.fn(),
+}))
 
 vi.mock('../../routing/api', async (original) => ({
   ...(await original<typeof import('../../routing/api')>()),
@@ -13,20 +19,26 @@ vi.mock('../../routing/api', async (original) => ({
 afterEach(() => {
   cleanup()
   vi.resetAllMocks()
+  clearPageCache()
 })
 
 it('검색한 출발지 좌표로 경로를 요청하고 출발지를 바꾸면 이전 경로를 지운다', async () => {
   const user = userEvent.setup()
-  vi.mocked(searchPlaces).mockImplementation(async (query) => [
-    {
-      id: query,
-      name: query,
-      category: '장소',
-      address: '서울 주소',
-      lat: query === '출발카페' ? 37.51 : 37.56,
-      lng: query === '출발카페' ? 127.02 : 126.97,
-    },
-  ])
+  vi.mocked(queryApi).mockImplementation(async (_path, params) => ({
+    items: [
+      {
+        place_id: params.query,
+        name: params.query,
+        category_name: '장소',
+        address: '서울 주소',
+        coordinates: {
+          latitude: params.query === '출발카페' ? 37.51 : 37.56,
+          longitude: params.query === '출발카페' ? 127.02 : 126.97,
+        },
+      },
+    ],
+    next_cursor: null,
+  }))
   vi.mocked(fetchDirections).mockResolvedValue({
     distance: 5000,
     duration: 600,
@@ -61,12 +73,14 @@ it('검색한 출발지 좌표로 경로를 요청하고 출발지를 바꾸면 
 
 it('출발지 검색 실패 시 다시 시도할 수 있다', async () => {
   const user = userEvent.setup()
-  vi.mocked(searchPlaces).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([])
+  vi.mocked(queryApi)
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce({ items: [], next_cursor: null })
   render(<DirectionsPanel go={vi.fn()} />)
   await user.type(screen.getByRole('searchbox', { name: '출발지 검색' }), '출발카페')
   await user.click(await screen.findByRole('button', { name: '출발지 검색 다시 시도' }))
   expect(
     await screen.findByText('검색 결과가 없어요. 다른 이름으로 찾아보세요.'),
   ).toBeInTheDocument()
-  expect(searchPlaces).toHaveBeenCalledTimes(2)
+  expect(queryApi).toHaveBeenCalledTimes(2)
 })

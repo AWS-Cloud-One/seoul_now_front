@@ -45,7 +45,8 @@ export function populationHeat(
   context.setTransform(scale, 0, 0, scale, 0, 0)
   const opacity = { 여유: 0.35, 보통: 0.47, '약간 붐빔': 0.6, 붐빔: 0.7, '정보 없음': 0.3 }
   for (const place of places) {
-    const points = place.ring.map(project)
+    const rings = (place.polygons || [[place.ring]]).flat()
+    const points = rings.flatMap((ring) => ring.map(project))
     if (
       !points.length ||
       Math.max(...points.map((p) => p.x)) < -pad ||
@@ -55,11 +56,13 @@ export function populationHeat(
     )
       continue
     context.beginPath()
-    points.forEach((point, i) => {
-      if (i === 0) context.moveTo(point.x + pad, point.y + pad)
-      else context.lineTo(point.x + pad, point.y + pad)
-    })
-    context.closePath()
+    for (const ring of rings) {
+      ring.map(project).forEach((point, i) => {
+        if (i === 0) context.moveTo(point.x + pad, point.y + pad)
+        else context.lineTo(point.x + pad, point.y + pad)
+      })
+      context.closePath()
+    }
     context.fillStyle = POPULATION_HEAT_COLORS[place.level]
     context.globalAlpha = opacity[place.level]
     context.fill('evenodd')

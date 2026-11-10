@@ -1,10 +1,10 @@
 import { useSelectedParking } from '../../parking/useSelectedParking'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { DEPARTURES, dateLabel, placeById } from '../../domain.js'
 import { useDemo } from '../../useDemo'
 import { useLayout } from './layout'
 import Icon from '../Icon'
-import { fitMap, getMapOverlay, MAP_OVERLAY_EVENT } from './useRoute'
+import { fitMap } from './useRoute'
 import { useLive } from '../../live/store'
 import { POPULATION_HEAT_COLORS } from '../../live/populationHeat'
 import { ROAD_SPEED_COLORS } from '../../live/roadStyle'
@@ -19,12 +19,6 @@ const layerOptions = [
 export function LayerMenu() {
   const { layers, toggleLayer } = useDemo()
   const live = useLive()
-  const [routing, setRouting] = useState(() => !!getMapOverlay().route?.length)
-  useEffect(() => {
-    const update = () => setRouting(!!getMapOverlay().route?.length)
-    window.addEventListener(MAP_OVERLAY_EVENT, update)
-    return () => window.removeEventListener(MAP_OVERLAY_EVENT, update)
-  }, [])
   return (
     <div className="sn-map-layers">
       <div className="sn-layer-buttons" role="group" aria-label="지도 표시 항목">
@@ -34,13 +28,8 @@ export function LayerMenu() {
             type="button"
             className={'sn-layer-toggle is-' + key}
             aria-label={label + ' 표시'}
-            aria-pressed={layers[key] && !(key === 'roads' && routing)}
-            disabled={key === 'roads' && routing}
-            title={
-              key === 'roads' && routing
-                ? '길찾기 중에는 경로선의 교통 상태만 표시해요'
-                : label + ' 켜기 / 끄기'
-            }
+            aria-pressed={layers[key]}
+            title={label + ' 켜기 / 끄기'}
             onClick={() => toggleLayer(key)}
           >
             <Icon name={icon} />
@@ -48,11 +37,13 @@ export function LayerMenu() {
           </button>
         ))}
       </div>
-      {layers.population && !live.places.some((place) => !place.stale) && live.savedPlaces.length > 0 && (
-        <p className="sn-population-status" role="status">
-          저장된 유동인구 관측을 표시하고 있어요.
-        </p>
-      )}
+      {layers.population &&
+        !live.places.some((place) => !place.stale) &&
+        live.savedPlaces.length > 0 && (
+          <p className="sn-population-status" role="status">
+            현재 유효한 인구 관측을 확인하지 못했어요. 구역 위치만 표시해요.
+          </p>
+        )}
       {layers.population && live.status === 'error' && !live.savedPlaces.length && (
         <p className="sn-population-status" role="status">
           유동인구 데이터를 불러오지 못했어요.
@@ -172,13 +163,19 @@ export function SelectionSummary({
   const { wide } = useLayout()
   const { active, result, ui, selectPlace } = useDemo()
   const parking = useSelectedParking(active.selected)
-  const place = placeById(active.selected)
+  const place = placeById(active.selected, result)
   const entry = result?.entries.find((e) => e.id === active.selected)
   if (!place || !entry || !result || ui.detail) return null
   // Never both at once: the map card when the panel is narrow, the panel block when it is wide.
   if (variant === 'map' ? wide : !wide) return null
   const number = result.entries.indexOf(entry) + 1
-  const origin = active.conditions.departure ? DEPARTURES[active.conditions.departure] : undefined
+  const conditions = result.conditions
+  const coordinates = conditions.origin?.coordinates
+  const origin = coordinates
+    ? { lat: coordinates.latitude, lon: coordinates.longitude }
+    : conditions.departure
+      ? DEPARTURES[conditions.departure]
+      : undefined
   return (
     <section
       className={variant === 'map' ? 'sn-glass sn-summary-card' : 'sn-selected-inline'}

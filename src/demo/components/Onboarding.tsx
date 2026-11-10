@@ -1,12 +1,13 @@
-import { validateConditions } from '../domain.js'
+import { validateRecommendation } from '../recommendationConditions'
+import RecommendationFeedback from './RecommendationFeedback'
 import { useDemo } from '../useDemo'
 import ConditionsForm from './ConditionsForm'
 import Icon from './Icon'
 
 export default function Onboarding() {
-  const { active, ui, updateDraft, startTrip } = useDemo()
+  const { active, ui, updateDraft, submitRecommendation } = useDemo()
   const draft = active.onboardingDraft || active.conditions
-  const invalid = validateConditions(draft)
+  const invalid = validateRecommendation(draft)
   return (
     <div className="dialog-inner onboarding">
       <header className="onboarding-head">
@@ -19,10 +20,11 @@ export default function Onboarding() {
         </p>
       </header>
       <div className="onboarding-body">
+        <RecommendationFeedback />
         <ConditionsForm
           initial={draft}
           mode="onboarding"
-          onSubmit={(conditions) => void startTrip(conditions)}
+          onSubmit={(conditions) => void submitRecommendation(conditions, true)}
           onChange={updateDraft}
         />
       </div>

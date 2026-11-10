@@ -1,4 +1,14 @@
+import type {
+  ContextResult,
+  ConversationData,
+  Location,
+  Purpose,
+  ServerTrip,
+} from '../api/contracts'
+
 export type Conditions = {
+  origin?: Location | null
+  purposeKeywords?: Partial<Record<Purpose, string | null>>
   departure: string | null
   purposes: string[]
   keyword: string | null
@@ -27,11 +37,12 @@ export type Place = {
   photoUrl?: string | null
   tags?: string[]
   parking: Parking[] | null
-  parkingRadius: number
+  parkingRadius: number | null
   legacy?: boolean
 }
 export type Entry = {
   id: string
+  place?: Place
   photoUrl?: string | null
   eta: number | null
   queryTime: string
@@ -41,6 +52,7 @@ export type Entry = {
 }
 export type Result = {
   id: string
+  api?: { tripId: string; conditionVersion: number; result: ContextResult }
   number?: number
   entries: Entry[]
   conditions: Conditions
@@ -54,11 +66,14 @@ export type Message = {
   place?: string
   fallback?: boolean
   kind?: string
+  answer?: ConversationData['answer']
+  taskResults?: ConversationData['task_results']
 }
 export type Layers = { roads: boolean; parking: boolean; population: boolean }
 export type MapView = { center?: [number, number]; zoom?: number; resultId?: string }
 export type Trip = {
   schema: number
+  api?: ServerTrip
   trip: string
   title: string
   createdAt: string
@@ -72,6 +87,7 @@ export type Trip = {
   excluded: string[]
   general: Result | null
   chat: Message[]
+  parkingDetails?: Record<string, import('./parking/facilities').ParkingFacility>
   parkingSelections?: Record<string, string>
   pendingChat: { patch: Partial<Conditions>; need?: string } | null
   current: string | null
@@ -91,10 +107,12 @@ export type Trip = {
 export type Store = { schema: number; activeTripId: string; trips: Trip[] }
 export type SavedTrip = {
   id: string
+  api?: ServerTrip
   sourceTripId: string
   title: string
   savedAt: string
   result: Result
+  parkingDetails?: Record<string, import('./parking/facilities').ParkingFacility>
   parkingSelections?: Record<string, string>
   selectedId: string | null
   general: boolean

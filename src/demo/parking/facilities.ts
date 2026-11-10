@@ -4,6 +4,8 @@ export type ParkingFacility = ParkingLot & { memberIds: string[] }
 
 /** A provider may publish each street-parking bay as a separate coordinate. */
 export function parkingFacilities(lots: ParkingLot[]): ParkingFacility[] {
+  const apiLots = lots.filter((lot) => lot.api).map((lot) => ({ ...lot, memberIds: [lot.id] }))
+  lots = lots.filter((lot) => !lot.api)
   const groups = new Map<string, ParkingLot[]>()
   for (const lot of lots) {
     const key =
@@ -50,7 +52,10 @@ export function parkingFacilities(lots: ParkingLot[]): ParkingFacility[] {
               : []),
           ])
         : []
-    const nameKey = first.name.replace(/\([시구]\)$/, '').replace(/\s/g, '').replace(/공영주차장$/, '')
+    const nameKey = first.name
+      .replace(/\([시구]\)$/, '')
+      .replace(/\s/g, '')
+      .replace(/공영주차장$/, '')
     const sameRegistration = byName.get(nameKey)?.find((facility) => {
       if (
         !first.code ||
@@ -70,9 +75,11 @@ export function parkingFacilities(lots: ParkingLot[]): ParkingFacility[] {
         const address = first.address?.replace(/^서울(?:특별시|시)\s+/, '')
         const otherAddress = facility.address?.replace(/^서울(?:특별시|시)\s+/, '')
         if (nameKey && address && address === otherAddress && distance <= 15) return true
-        return distance <= 8 && (facility.code === first.code || (
-          first.name === facility.name && !!(first.address && facility.address)
-        ))
+        return (
+          distance <= 8 &&
+          (facility.code === first.code ||
+            (first.name === facility.name && !!(first.address && facility.address)))
+        )
       }
       if (facility.code === first.code) return distance <= 1
       return !!first.address && first.address === facility.address && distance <= 3
@@ -133,5 +140,5 @@ export function parkingFacilities(lots: ParkingLot[]): ParkingFacility[] {
       byIdentity.set(key, matches)
     }
   }
-  return facilities
+  return [...apiLots, ...facilities]
 }

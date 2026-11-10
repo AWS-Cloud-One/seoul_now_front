@@ -1,7 +1,15 @@
 export const endpointHtml = (kind: 'origin' | 'destination') =>
   `<span class="sn-route-endpoint is-${kind}"><svg viewBox="0 0 40 50" aria-hidden="true"><path d="M20 2C10 2 3 9 3 19c0 10 17 28 17 28s17-18 17-28C37 9 30 2 20 2Z"/><text x="20" y="22" text-anchor="middle">${kind === 'origin' ? '출발' : '도착'}</text></svg></span>`
-export const arrowHtml = (angle: number) =>
-  `<svg class="sn-route-arrow" style="transform:rotate(${angle}deg)" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2 8 5 2 8 3.5 5Z" /></svg>`
+export const arrowHtml = (angle: number, size = 10) =>
+  `<svg class="sn-route-arrow" style="transform:rotate(${angle}deg);width:${size}px;height:${size}px" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2 8 5 2 8 3.5 5Z" /></svg>`
+
+export const ROUTE_COLOR = '#1e40af'
+
+/** Both map providers use the same zoom convention here (Kakao: 20 - level). */
+export function routeLineWidths(zoom: number) {
+  const line = Math.min(7, Math.max(2.5, 2.5 + (zoom - 12) * 0.75))
+  return { line, arrow: Math.max(2, line - 1) }
+}
 
 /** Place direction marks at screen-space intervals, pointing toward the next route point. */
 export function routeArrows(

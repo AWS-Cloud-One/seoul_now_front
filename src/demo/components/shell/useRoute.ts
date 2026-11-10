@@ -45,6 +45,7 @@ export function distanceMeters(a: [number, number], b: [number, number]) {
 export const FOOD_SELECT_EVENT = 'sn:food-select'
 export const MAP_OVERLAY_EVENT = 'sn:map-overlay'
 export type MapOverlay = {
+  parkingBase?: { name: string; lat: number; lng: number } | null
   origin?: { name: string; lat: number; lon: number } | null
   routeSegments?: import('../../routing/traffic').RouteSegment[] | null
   destination?: { name: string; lat: number; lng: number } | null

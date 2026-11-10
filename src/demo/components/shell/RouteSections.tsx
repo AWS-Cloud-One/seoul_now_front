@@ -3,11 +3,9 @@ import { DEPARTURES } from '../../domain.js'
 import {
   ApiProblem,
   fetchDirections,
-  fetchNearbyShops,
   kilometers,
   minutes,
   SHOP_KINDS,
-  type FoodPlace,
   type RouteResult,
   type ShopKind,
 } from '../../routing/api'
@@ -21,7 +19,12 @@ import {
   SecondaryButton,
 } from './ui'
 import { focusMap, FOOD_SELECT_EVENT, setMapOverlay } from './useRoute'
-import { ROUTE_TRAFFIC } from '../../routing/traffic'
+import InformationMeta from '../InformationMeta'
+import { dateLabel } from '../../domain.js'
+import { usePages } from '../../../api/usePages'
+import type { FoundPlaceData } from '../../../api/queries'
+import { foundPlace } from '../../routing/api'
+import { useSecondsRemaining } from '../../useSecondsRemaining'
 
 const ME = '__me__'
 /** Small stand-in mark (yellow tile + pin), not the official Kakao asset. */
@@ -45,19 +48,23 @@ type Load<T> =
 
 const problem = (error: unknown): Load<never> => ({
   status: 'error',
-  message: error instanceof ApiProblem ? error.message : '알 수 없는 오류가 발생했어요.',
+  message: error instanceof Error ? error.message : '알 수 없는 오류가 발생했어요.',
 })
 
 function useLoader<T>(run: (signal: AbortSignal) => Promise<T>) {
   const [state, setState] = useState<Load<T>>({ status: 'idle' })
   const controller = useRef<AbortController | null>(null)
   const latest = useRef(run)
+  const retryAt = useRef(0)
+  const [retryTime, setRetryTime] = useState(0)
+  const wait = useSecondsRemaining(retryTime)
   useEffect(() => {
     latest.current = run
   })
   // Callers remount this hook per place (key), so state resets by itself; just cancel on unmount.
   useEffect(() => () => controller.current?.abort(), [])
   const load = () => {
+    if (retryAt.current > Date.now() || state.status === 'loading') return
     controller.current?.abort()
     const current = new AbortController()
     controller.current = current
@@ -67,7 +74,11 @@ function useLoader<T>(run: (signal: AbortSignal) => Promise<T>) {
         if (!current.signal.aborted) setState({ status: 'done', data })
       },
       (error) => {
-        if (!current.signal.aborted) setState(problem(error))
+        if (!current.signal.aborted) {
+          retryAt.current = error instanceof ApiProblem ? error.retryAt : 0
+          setRetryTime(retryAt.current)
+          setState(problem(error))
+        }
       },
     )
   }
@@ -75,7 +86,7 @@ function useLoader<T>(run: (signal: AbortSignal) => Promise<T>) {
     controller.current?.abort()
     setState({ status: 'idle' })
   }
-  return [state, load, reset] as const
+  return [state, load, reset, wait] as const
 }
 
 export function RouteSection({
@@ -98,7 +109,7 @@ export function RouteSection({
         : chosen
           ? DEPARTURES[chosen]
           : undefined
-  const [state, load, reset] = useLoader<RouteResult>((signal) =>
+  const [state, load, reset, wait] = useLoader<RouteResult>((signal) =>
     fetchDirections(origin!, place, signal),
   )
   const choose = (value: string) => {
@@ -139,6 +150,7 @@ export function RouteSection({
   return (
     <section className="sn-section" aria-labelledby="sn-route-title">
       <h3 id="sn-route-title">가는 길</h3>
+      {wait > 0 && <p role="status">{wait}초 후 다시 조회할 수 있어요.</p>}
       {originOverride === undefined && (
         <label className="sn-field">
           출발지
@@ -166,7 +178,7 @@ export function RouteSection({
           {state.status === 'loading' ? '경로 찾는 중…' : `${place.name}까지 길찾기`}
         </PrimaryButton>
       ) : state.status === 'error' ? (
-        <ErrorState title="경로를 불러오지 못했어요" onRetry={load}>
+        <ErrorState title="경로를 불러오지 못했어요" onRetry={wait > 0 ? undefined : load}>
           {state.message}
         </ErrorState>
       ) : (
@@ -190,14 +202,17 @@ export function RouteSection({
           <p className="sn-note">
             지금 교통 상황 기준 추천 경로예요. 주차 시간과 도보 시간은 포함되지 않아요.
           </p>
-          <div className="sn-route-legend" aria-label="경로 교통 상태 색상">
-            {ROUTE_TRAFFIC.map((item) => (
-              <span key={item.state}>
-                <i style={{ background: item.color }} />
-                {item.label}
-              </span>
-            ))}
-          </div>
+          <p className="sn-note">
+            진한 파란색 선이 이동 경로예요. 도로혼잡도를 켜면 주변 도로의 소통 정보를 함께 볼 수
+            있어요.
+          </p>
+          {!state.data.segments?.length && (
+            <p role="status">경로 도형은 제공되지 않았어요. 이동시간과 거리는 확인할 수 있어요.</p>
+          )}
+          {state.data.checkedAt && (
+            <p className="sn-note">조회: {dateLabel(state.data.checkedAt)}</p>
+          )}
+          {state.data.information && <InformationMeta information={state.data.information} />}
           <SecondaryButton className="is-compact" onClick={load}>
             <Icon name="refresh" />
             다시 조회
@@ -211,14 +226,33 @@ export function RouteSection({
 export function NearbyShopsSection({ place }: { place: Target }) {
   const RADIUS = 800
   const [kind, setKind] = useState<ShopKind>('food')
-  const [state, load] = useLoader<FoodPlace[]>((signal) =>
-    fetchNearbyShops(kind, place, RADIUS, signal),
+  const [started, setStarted] = useState(false)
+  const pages = usePages<FoundPlaceData>(
+    '/locations/places/nearby',
+    { category: kind, latitude: place.lat, longitude: place.lon, radius_meters: RADIUS, limit: 10 },
+    started,
+    0,
   )
+  const state = {
+    status: !started
+      ? 'idle'
+      : pages.busy && !pages.items.length
+        ? 'loading'
+        : pages.error && !pages.items.length
+          ? 'error'
+          : 'done',
+    data: pages.items.map(foundPlace),
+    message: pages.error,
+  }
+  const load = () => {
+    if (started) pages.refresh()
+    else setStarted(true)
+  }
   const [picked, setPicked] = useState<string | null>(null)
   useEffect(() => {
-    setMapOverlay({ food: state.status === 'done' ? state.data : null })
+    setMapOverlay({ food: pages.items.map(foundPlace) })
     return () => setMapOverlay({ food: null })
-  }, [state])
+  }, [pages.items])
   useEffect(() => {
     const select = (event: Event) => setPicked((event as CustomEvent<{ id: string }>).detail.id)
     window.addEventListener(FOOD_SELECT_EVENT, select)
@@ -228,6 +262,7 @@ export function NearbyShopsSection({ place }: { place: Target }) {
   return (
     <section className="sn-section" aria-labelledby="sn-shop-title">
       <h3 id="sn-shop-title">근처 상가</h3>
+      {pages.wait > 0 && <p role="status">{pages.wait}초 후 다시 조회할 수 있어요.</p>}
       <div className="sn-chips" role="group" aria-label="상가 종류">
         {(Object.keys(SHOP_KINDS) as ShopKind[]).map((key) => (
           <FilterChip
@@ -251,13 +286,16 @@ export function NearbyShopsSection({ place }: { place: Target }) {
       ) : state.status === 'loading' ? (
         <LoadingSkeleton rows={2} />
       ) : state.status === 'error' ? (
-        <ErrorState title={`${label}을 불러오지 못했어요`} onRetry={load}>
+        <ErrorState
+          title={`${label}을 불러오지 못했어요`}
+          onRetry={pages.wait > 0 ? undefined : load}
+        >
           {state.message}
         </ErrorState>
       ) : state.data.length ? (
         <>
           <ol className="sn-list">
-            {state.data.slice(0, 8).map((shop) => (
+            {state.data.map((shop) => (
               <li key={shop.id} className="sn-food-item">
                 <button
                   type="button"
@@ -270,7 +308,8 @@ export function NearbyShopsSection({ place }: { place: Target }) {
                 >
                   <strong>{shop.name}</strong>
                   <span className="sn-place-meta">
-                    {shop.category} · 직선 {kilometers(shop.meters)}
+                    {shop.category} ·{' '}
+                    {shop.meters === null ? '거리 미확인' : `직선 ${kilometers(shop.meters)}`}
                   </span>
                   {shop.address && <span className="sn-place-meta">{shop.address}</span>}
                 </button>
@@ -292,8 +331,20 @@ export function NearbyShopsSection({ place }: { place: Target }) {
           <p className="sn-note">
             카카오 장소 검색 결과예요. 영업 여부와 평점은 확인되지 않아 표시하지 않아요.
           </p>
-          <SecondaryButton className="is-compact" onClick={load}>
-            <Icon name="refresh" />
+          {pages.error && <p role="alert">{pages.error}</p>}
+          {pages.page?.next_cursor && (
+            <SecondaryButton
+              disabled={pages.busy || pages.wait > 0 || pages.expired}
+              onClick={pages.more}
+            >
+              상가 더 보기
+            </SecondaryButton>
+          )}
+          <SecondaryButton
+            className="is-compact"
+            disabled={pages.busy || pages.wait > 0}
+            onClick={load}
+          >
             다시 조회
           </SecondaryButton>
         </>

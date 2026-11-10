@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { conditionText, dateLabel, placeById } from '../domain.js'
 import { useDemo } from '../useDemo'
 import type { Result } from '../types'
-import Onboarding from './Onboarding'
+import ChatClarification from './ChatClarification'
+import RecommendationFeedback from './RecommendationFeedback'
 import Icon from './Icon'
 import PlacePhoto from './PlacePhoto'
 
@@ -160,7 +161,7 @@ export function ChatRecommendation({ result }: { result: Result }) {
         }}
       >
         {result.entries.map((entry, i) => {
-          const place = placeById(entry.id)
+          const place = placeById(entry.id, result)
           if (!place) return null
           const selected = current && active.selected === entry.id
           return (
@@ -202,14 +203,16 @@ export function ChatRecommendation({ result }: { result: Result }) {
                   서울 {place.area} · {place.category}
                   {active.excluded.includes(entry.id) ? ' · 다음 추천에서 제외' : ''}
                 </span>
-                <span
-                  className="recommendation-rating"
-                  title="시연용 예시 평점 · 실제 이용자 평점 아님"
-                >
-                  <span aria-hidden="true">★</span> {i === 0 ? '4.7' : '4.5'}{' '}
-                  <small>({i === 0 ? '328' : '219'})</small>
-                  <small className="rating-demo">예시</small>
-                </span>
+                {!result.api && (
+                  <span
+                    className="recommendation-rating"
+                    title="시연용 예시 평점 · 실제 이용자 평점 아님"
+                  >
+                    <span aria-hidden="true">★</span> {i === 0 ? '4.7' : '4.5'}{' '}
+                    <small>({i === 0 ? '328' : '219'})</small>
+                    <small className="rating-demo">예시</small>
+                  </span>
+                )}
                 <span className="chat-place-reason">{place.description || entry.reason}</span>
                 <span className="carousel-card-footer">
                   <span className="chat-place-eta">
@@ -261,13 +264,15 @@ export function ChatRecommendation({ result }: { result: Result }) {
           )}
         </div>
       </div>
-      <span className="chat-recommendation-time">{dateLabel(result.time)} 조회 · 예시 장소</span>
+      <span className="chat-recommendation-time">
+        {dateLabel(result.time)} 조회{!result.api && ' · 예시 장소'}
+      </span>
     </div>
   )
 }
 
 export function SearchProgress() {
-  const { ui } = useDemo()
+  const { active, ui } = useDemo()
   const progress = ui.progress
   if (!ui.busy || !progress) return null
   const stages = [
@@ -291,7 +296,7 @@ export function SearchProgress() {
                 ? '이동시간을 다시 확인하고 있어요'
                 : '메시지를 읽고 있어요'}
         </strong>
-        <span className="search-demo">모의 응답</span>
+        {!active.api && <span className="search-demo">모의 응답</span>}
       </div>
       {progress.conditions && (
         <p className="search-request-summary">{conditionText(progress.conditions)}</p>
@@ -332,8 +337,7 @@ export default function Chat({ embedded = true }: { embedded?: boolean }) {
       log.current.scrollTop = log.current.scrollHeight
     }
   }, [result?.id, active.chat.length, ui.busy, ui.progress?.stage])
-  if (!active.onboardingComplete) return <Onboarding />
-  const selected = placeById(active.selected)
+  const selected = placeById(active.selected, result)
   const need = active.pendingChat?.need
   const samples =
     need === 'departure'
@@ -352,8 +356,10 @@ export default function Chat({ embedded = true }: { embedded?: boolean }) {
   const showReply =
     !ui.busy &&
     latestMessage?.role === 'assistant' &&
-    !latestMessage.resultId &&
-    (!result || active.chat.length - 1 > latestRecommendationIndex)
+    (!latestMessage.resultId || !!latestMessage.taskResults?.length) &&
+    (!result ||
+      active.chat.length - 1 > latestRecommendationIndex ||
+      (!!latestMessage.taskResults?.length && latestMessage.resultId === result.id))
   return (
     <div className="dialog-inner">
       <header className="dialog-head chat-head">
@@ -391,7 +397,7 @@ export default function Chat({ embedded = true }: { embedded?: boolean }) {
           <strong>지도를 보며 함께 골라볼까요?</strong>
         )}
         {!embedded && <p>{conditionText(active.conditions)}</p>}
-        {active.pendingChat && (
+        {(active.pendingChat || active.api?.clarification) && (
           <div className="context-place">
             아직 적용하지 않은 요청이 있어요. 추가 답변을 기다리고 있어요.
           </div>
@@ -459,6 +465,8 @@ export default function Chat({ embedded = true }: { embedded?: boolean }) {
             {latestMessage.fallback && <button onClick={openEdit}>조건을 직접 입력하기</button>}
           </div>
         )}
+        <ChatClarification />
+        <RecommendationFeedback />
         <div className="chat-progress-host">
           <SearchProgress />
         </div>

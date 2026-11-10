@@ -1,3 +1,4 @@
+import { mockScreenApi } from '../api/screenTestApi'
 import { act, cleanup, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -134,14 +135,15 @@ it('저장 탭 빈 목록 → 추천 저장 → 새 여행 → 저장 목록에�
   expect(await screen.findByText('저장한 여행이 없어요')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: /현재 추천 저장/ })).toBeDisabled()
   await user.click(screen.getByRole('button', { name: 'AI 추천' }))
-  await user.selectOptions(screen.getByLabelText(/어디에서 출발하세요/), '서울역')
+  mockScreenApi()
+  await user.type(screen.getByRole('searchbox', { name: /어디에서 출발하세요/ }), '서울역')
+  await user.click(await screen.findByRole('button', { name: /서울역.*서울 중구/ }))
   await user.click(screen.getByRole('checkbox', { name: '카페' }))
   await user.click(screen.getByRole('button', { name: /이 조건으로 찾아보기/ }))
   await waitFor(() => expect(screen.getAllByRole('button', { name: /선택$/ })).toHaveLength(3))
-  const firstName = placeById(
-    JSON.parse(sessionStorage.getItem('seoul-next-stop-trips-v2')!).trips[0].groups[0].entries[0]
-      .id,
-  )!.name
+  const storedResult = JSON.parse(sessionStorage.getItem('seoul-next-stop-trips-v2')!).trips[0]
+    .groups[0]
+  const firstName = placeById(storedResult.entries[0].id, storedResult)!.name
   await user.click(
     within(screen.getByRole('navigation', { name: '주요 메뉴' })).getByRole('button', {
       name: /저장/,

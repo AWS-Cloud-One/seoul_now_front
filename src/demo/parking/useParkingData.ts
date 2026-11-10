@@ -10,5 +10,11 @@ export function useParkingData(scope: ParkingScope) {
   )
   const getSnapshot = useCallback(() => store.getSnapshot(scope), [store, scope])
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-  return { ...snapshot, kind: store.kind, refresh: () => store.refresh(scope) }
+  return {
+    ...snapshot,
+    kind: store.kind,
+    setViewport: store.setViewport,
+    remember: store.remember,
+    refresh: () => store.refresh(scope),
+  }
 }

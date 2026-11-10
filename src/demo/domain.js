@@ -2089,7 +2089,7 @@ function parseChat(raw) {
 
 // END REGIONAL MOCKS
 function newTripId() {
-  return `trip-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+  return crypto.randomUUID()
 }
 function newState() {
   const now = new Date().toISOString()
@@ -2171,12 +2171,28 @@ function timeLabel(t) {
       }).format(new Date(t))
     : '확인 불가'
 }
+const minuteFormatter = new Intl.NumberFormat('ko-KR', {
+  maximumFractionDigits: 1,
+  useGrouping: false,
+})
 function conditionText(c) {
   return [
     c.departure || '출발지 미정',
     c.purposes.length ? c.purposes.join(' 또는 ') : '목적 미정',
-    c.maxMinutes === null ? '이동시간 제한 없음' : `차로 ${c.maxMinutes}분 이내`,
-    c.keyword ? `키워드 “${c.keyword}”` : null,
+    c.maxMinutes === null
+      ? '이동시간 제한 없음'
+      : `차로 ${minuteFormatter.format(c.maxMinutes)}분 이내`,
+    c.purposeKeywords
+      ? Object.entries(c.purposeKeywords)
+          .filter(([, value]) => value)
+          .map(
+            ([key, value]) =>
+              `${{ cafe: '카페', food: '식사', walk: '산책', exhibition: '전시' }[key]} “${value}”`,
+          )
+          .join(' · ')
+      : c.keyword
+        ? `키워드 “${c.keyword}”`
+        : null,
     c.group,
     c.headcount ? `${c.headcount}명` : null,
     c.ages.length ? c.ages.join('·') : null,
@@ -2197,7 +2213,12 @@ function patchConditions(base, patch) {
   return next
 }
 function validateConditions(c) {
-  if (!DEPARTURES[c.departure])
+  const verifiedOrigin =
+    c.origin?.supported &&
+    c.origin.label === c.departure &&
+    Number.isFinite(c.origin.coordinates?.latitude) &&
+    Number.isFinite(c.origin.coordinates?.longitude)
+  if (!verifiedOrigin && !DEPARTURES[c.departure])
     return '출발지를 선택해 주세요. 서울·인천·경기의 예시 출발지를 지원해요.'
   if (!Array.isArray(c.purposes) || !c.purposes.length)
     return '카페·식사·산책·전시 중 목적을 선택해 주세요.'
@@ -2207,7 +2228,12 @@ function validateConditions(c) {
     return '목적은 최대 2개까지 선택해 주세요. 두 목적은 코스가 아닌 대안이에요.'
   if (c.headcount !== null && (!Number.isInteger(c.headcount) || c.headcount < 1))
     return '인원은 1 이상의 정확한 정수로 입력해 주세요.'
-  if (c.maxMinutes !== null && (!Number.isInteger(c.maxMinutes) || c.maxMinutes < 1))
+  if (
+    c.maxMinutes !== null &&
+    (verifiedOrigin
+      ? !Number.isFinite(c.maxMinutes) || c.maxMinutes <= 0
+      : !Number.isInteger(c.maxMinutes) || c.maxMinutes < 1)
+  )
     return '최대 운전 시간은 1분 이상의 정수로 입력하거나 비워 주세요.'
   return ''
 }
@@ -2231,7 +2257,9 @@ function conditionChanges(a, b) {
         : '선택 안 함'
       : Array.isArray(v)
         ? v.join(' 또는 ')
-        : `${v}${k === 'headcount' ? '명' : k === 'maxMinutes' ? '분' : ''}`
+        : k === 'maxMinutes'
+          ? `${minuteFormatter.format(v)}분`
+          : `${v}${k === 'headcount' ? '명' : ''}`
   return Object.keys(labels)
     .filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]))
     .map((k) => `${labels[k]}: ${fmt(k, a[k])} → ${fmt(k, b[k])}`)
@@ -2424,8 +2452,9 @@ const MockService = {
     return parseChat(text)
   },
 }
-function placeById(id) {
-  return PLACES.find((p) => p.id === id)
+function placeById(id, result) {
+  const snapshot = result?.entries.find((entry) => entry.id === id)?.place
+  return snapshot || (result?.api ? undefined : PLACES.find((p) => p.id === id))
 }
 export {
   PURPOSES,

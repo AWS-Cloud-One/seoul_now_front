@@ -1,16 +1,22 @@
-import { distanceMeters } from '../components/shell/useRoute'
+import {
+  queryApi,
+  QueryError,
+  type DrivingData,
+  type FoundPlaceData,
+  type Page,
+} from '../../api/queries'
 import type { RouteSegment } from './traffic'
-
-const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
-
+export { QueryError as ApiProblem }
 export type RouteResult = {
   segments?: RouteSegment[]
   distance: number
   duration: number
   taxiFare: number | null
   tollFare: number | null
-  /** [lat, lng] pairs ready for the map. */
   path: [number, number][]
+  information?: DrivingData['route']
+  checkedAt?: string
+  geometryReason?: string | null
 }
 export type FoodPlace = {
   id: string
@@ -21,88 +27,72 @@ export type FoodPlace = {
   url: string
   lat: number
   lng: number
-  meters: number
+  meters: number | null
 }
-export class ApiProblem extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message)
-  }
-}
-
-async function getJson(path: string, params: Record<string, string | number>, signal: AbortSignal) {
-  const query = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]))
-  let response: Response
-  try {
-    response = await fetch(`${BASE}${path}?${query}`, { signal })
-  } catch (error) {
-    if ((error as Error).name === 'AbortError') throw error
-    throw new ApiProblem('서버에 연결하지 못했어요.', 0)
-  }
-  if (!response.ok) {
-    let detail = ''
-    try {
-      detail = (await response.json()).detail
-    } catch {
-      /* non-JSON error body */
-    }
-    throw new ApiProblem(
-      typeof detail === 'string' && detail ? detail : '요청에 실패했어요.',
-      response.status,
-    )
-  }
-  return response.json()
-}
-
+export type FoundPlace = Omit<FoodPlace, 'meters' | 'phone' | 'url'>
 export async function fetchDirections(
   origin: { lat: number; lon: number },
   destination: { lat: number; lon: number },
   signal: AbortSignal,
-): Promise<RouteResult> {
-  const data = await getJson(
-    '/kakao/directions',
-    {
-      origin_lat: origin.lat,
-      origin_lon: origin.lon,
-      destination_lat: destination.lat,
-      destination_lon: destination.lon,
-    },
+) {
+  return parseDirections(
+    await queryApi<DrivingData>(
+      '/locations/routes/driving',
+      {
+        origin_latitude: origin.lat,
+        origin_longitude: origin.lon,
+        destination_latitude: destination.lat,
+        destination_longitude: destination.lon,
+        include_geometry: true,
+      },
+      signal,
+    ),
+  )
+}
+export function parseDirections(data: DrivingData): RouteResult {
+  const value = data.route?.status === 'available' ? data.route.value : null
+  if (!value || !Number.isFinite(value.duration_seconds) || !Number.isFinite(value.distance_meters))
+    throw new QueryError('현재 자동차 경로를 확인하지 못했어요.', 502)
+  const segments: RouteSegment[] = (value.geometry?.coordinates || []).map((line) => ({
+    path: line.map(([lng, lat]) => [lat, lng]),
+    state: 0,
+  }))
+  // Do not draw a fictional line between disconnected MultiLineString parts.
+  const path = segments.flatMap((segment) => segment.path)
+  return {
+    duration: value.duration_seconds,
+    distance: value.distance_meters,
+    taxiFare: value.taxi_fare_krw,
+    tollFare: value.toll_fare_krw,
+    path,
+    segments,
+    information: data.route,
+    checkedAt: data.checked_at,
+    geometryReason: value.geometry_reason,
+  }
+}
+export type ShopKind = 'food' | 'cafe'
+export const SHOP_KINDS = { food: { label: '음식점' }, cafe: { label: '카페' } }
+export function foundPlace(place: FoundPlaceData): FoodPlace {
+  return {
+    id: place.place_id,
+    name: place.name,
+    category: place.category_name?.split('>').at(-1)?.trim() || '장소',
+    address: place.road_address || place.address || '',
+    lat: place.coordinates.latitude,
+    lng: place.coordinates.longitude,
+    phone: place.phone || '',
+    url: place.provider_url && /^https?:\/\//i.test(place.provider_url) ? place.provider_url : '',
+    meters: place.distance_meters,
+  }
+}
+export async function searchPlaces(query: string, signal: AbortSignal): Promise<FoundPlace[]> {
+  const data = await queryApi<Page<FoundPlaceData>>(
+    '/locations/places/search',
+    { query, limit: 10 },
     signal,
   )
-  return parseDirections(data)
-}
-
-export function parseDirections(data: {
-  summary?: {
-    distance?: number
-    duration?: number
-    fare?: { taxi?: number; toll?: number }
-  }
-  coordinates?: [number, number][]
-  segments?: { coordinates: [number, number][]; traffic_state?: number }[]
-}): RouteResult {
-  const summary = data.summary
-  if (typeof summary?.distance !== 'number' || typeof summary.duration !== 'number')
-    throw new ApiProblem('경로 응답을 해석하지 못했어요.', 502)
-  return {
-    distance: summary.distance,
-    duration: summary.duration,
-    taxiFare: summary.fare?.taxi ?? null,
-    tollFare: summary.fare?.toll ?? null,
-    path: (data.coordinates || []).map(([lng, lat]) => [lat, lng]),
-    segments: (data.segments || []).map((segment) => ({
-      path: segment.coordinates.map(([lng, lat]) => [lat, lng] as [number, number]),
-      state: segment.traffic_state ?? 0,
-    })),
-  }
-}
-
-export type ShopKind = 'food' | 'cafe'
-export const SHOP_KINDS: Record<ShopKind, { label: string; query: string; group: string }> = {
-  food: { label: '음식점', query: '맛집', group: 'FD6' },
-  cafe: { label: '카페', query: '카페', group: 'CE7' },
+  return data.items.map(foundPlace)
 }
 export async function fetchNearbyShops(
   kind: ShopKind,
@@ -110,80 +100,24 @@ export async function fetchNearbyShops(
   radius: number,
   signal: AbortSignal,
 ): Promise<FoodPlace[]> {
-  const data = await getJson(
-    '/kakao/places',
-    { query: SHOP_KINDS[kind].query, lat: center.lat, lon: center.lon },
+  const data = await queryApi<Page<FoundPlaceData>>(
+    '/locations/places/nearby',
+    {
+      latitude: center.lat,
+      longitude: center.lon,
+      category: kind,
+      radius_meters: radius,
+      limit: 10,
+    },
     signal,
   )
-  return parseFood(data, center, radius, SHOP_KINDS[kind].group)
+  return data.items.map(foundPlace)
 }
-export type FoundPlace = {
-  id: string
-  name: string
-  category: string
-  address: string
-  lat: number
-  lng: number
-}
-/** Free-text place search (any name), nearest to central Seoul first. */
-export async function searchPlaces(query: string, signal: AbortSignal): Promise<FoundPlace[]> {
-  const data = await getJson('/kakao/places', { query, lat: 37.5665, lon: 126.978 }, signal)
-  return parseFound(data)
-}
-export function parseFound(data: { documents?: Record<string, string>[] }): FoundPlace[] {
-  return (data.documents || [])
-    .map((doc) => ({
-      id: doc.id,
-      name: doc.place_name,
-      category: (doc.category_name || '').split('>').slice(-1)[0].trim() || '장소',
-      address: doc.road_address_name || doc.address_name || '',
-      lat: Number(doc.y),
-      lng: Number(doc.x),
-    }))
-    .filter((place) => place.id && Number.isFinite(place.lat) && Number.isFinite(place.lng))
-}
-export async function fetchNearbyFood(
+export const fetchNearbyFood = (
   center: { lat: number; lon: number },
   radius: number,
   signal: AbortSignal,
-): Promise<FoodPlace[]> {
-  const data = await getJson(
-    '/kakao/places',
-    { query: '맛집', lat: center.lat, lon: center.lon },
-    signal,
-  )
-  return parseFood(data, center, radius)
-}
-
-export function parseFood(
-  data: { documents?: Record<string, string>[] },
-  center: { lat: number; lon: number },
-  radius: number,
-  group = 'FD6',
-): FoodPlace[] {
-  return (data.documents || [])
-    .filter((doc) => doc.category_group_code === group)
-    .map((doc) => {
-      const lat = Number(doc.y)
-      const lng = Number(doc.x)
-      return {
-        id: doc.id,
-        name: doc.place_name,
-        category: (doc.category_name || '').split('>').slice(-1)[0].trim() || '음식점',
-        address: doc.road_address_name || doc.address_name || '',
-        phone: doc.phone || '',
-        url: doc.place_url || '',
-        lat,
-        lng,
-        meters: Math.round(distanceMeters([center.lat, center.lon], [lat, lng])),
-      }
-    })
-    .filter(
-      (place) => Number.isFinite(place.lat) && Number.isFinite(place.lng) && place.meters <= radius,
-    )
-    .sort((a, b) => a.meters - b.meters)
-}
-
-export const minutes = (seconds: number) => Math.max(1, Math.round(seconds / 60))
+) => fetchNearbyShops('food', center, radius, signal)
+export const minutes = (seconds: number) => Math.max(1, Math.ceil(seconds / 60))
 export const kilometers = (meters: number) =>
-  meters >= 1000 ? `${(meters / 1000).toFixed(1)}km` : `${meters}m`
+  meters >= 1000 ? `${(meters / 1000).toFixed(1)}km` : `${Math.round(meters)}m`

@@ -1,5 +1,13 @@
 export type ParkingScope = 'preview' | 'map'
 export type ParkingLot = {
+  api?: {
+    facility: import('../../api/queries').ParkingFacilityData
+    comparison?: Pick<
+      import('../../api/queries').ParkingSearchItem,
+      'fee_status' | 'hourly_base_comparison_krw' | 'fee_reason'
+    >
+    detail?: import('../../api/queries').ParkingDetail
+  }
   code?: string | null
   id: string
   name: string
@@ -19,7 +27,11 @@ export type ParkingLot = {
 export type ParkingSource = {
   kind: 'mock' | 'api'
   initialData?: Partial<Record<ParkingScope, unknown>>
-  load(scope: ParkingScope, signal: AbortSignal): Promise<unknown>
+  load(
+    scope: ParkingScope,
+    signal: AbortSignal,
+    query?: import('../../api/queries').MapQuery,
+  ): Promise<unknown>
 }
 export type ParkingSnapshot = {
   lots: import('./facilities').ParkingFacility[]

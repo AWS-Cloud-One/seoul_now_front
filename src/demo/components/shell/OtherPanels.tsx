@@ -1,3 +1,7 @@
+import ParkingRegistration from '../ParkingRegistration'
+import { usePages } from '../../../api/usePages'
+import type { ParkingSearchItem } from '../../../api/queries'
+import { apiParkingLot, nearbyParkingPage } from '../../parking/api'
 import { estimatedWalkMinutes } from '../../parking/walking'
 import { compareParkingRows, hourlyBaseRate, type ParkingSort } from '../../parking/sort'
 import { useEffect, useRef, useState } from 'react'
@@ -18,7 +22,13 @@ import {
   SecondaryButton,
   StatusBadge,
 } from './ui'
-import { distanceMeters, focusMap, PARKING_SELECT_EVENT } from './useRoute'
+import {
+  distanceMeters,
+  focusMap,
+  PARKING_SELECT_EVENT,
+  getMapOverlay,
+  setMapOverlay,
+} from './useRoute'
 import type { Route } from './useRoute'
 
 type Base = { lat: number; lng: number; label: string }
@@ -27,20 +37,56 @@ const SEOUL: [number, number] = [37.5665, 126.978]
 export function ParkingPanel({ go }: { go: (route: Route) => void }) {
   const { active, result, layers, toggleLayer, workspaceCenter, selectParking, openDetail } =
     useParkingContext()
-  const data = useParkingData('map')
-  const selected = result ? placeById(active.selected) : undefined
+  const cached = useParkingData('map')
+  const [incomingBase] = useState(() => getMapOverlay().parkingBase)
+  const selected = result && !incomingBase ? placeById(active.selected, result) : undefined
   const center = workspaceCenter || SEOUL
   const [base, setBase] = useState<Base>(() =>
-    selected
-      ? { lat: selected.lat, lng: selected.lon, label: selected.name }
-      : { lat: center[0], lng: center[1], label: '지도 중심' },
+    incomingBase
+      ? { lat: incomingBase.lat, lng: incomingBase.lng, label: incomingBase.name }
+      : selected
+        ? { lat: selected.lat, lng: selected.lon, label: selected.name }
+        : { lat: center[0], lng: center[1], label: '지도 중심' },
   )
-  const [radius, setRadius] = useState(1000)
+  const [radius, setRadius] = useState(0)
   const [sort, setSort] = useState<ParkingSort>('distance')
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<string | null>(() =>
     selected ? active.parkingSelections?.[selected.id] || null : null,
   )
+  const nearby = radius === 0 && !query.trim() && sort === 'distance'
+  const pages = usePages<ParkingSearchItem>(
+    nearby ? '/parking/nearby' : '/parking/search',
+    {
+      latitude: base.lat,
+      longitude: base.lng,
+      ...(!nearby ? { radius_meters: radius || 1000, sort, name: query.trim() || undefined } : {}),
+      limit: 20,
+    },
+    cached.kind === 'api',
+    350,
+    nearby ? nearbyParkingPage : undefined,
+  )
+  useEffect(() => () => setMapOverlay({ parkingBase: null }), [])
+  const api = cached.kind === 'api'
+  const { remember } = cached
+  useEffect(() => {
+    if (api && pages.items.length)
+      remember(pages.items.map((item) => apiParkingLot(item.facility, item)))
+  }, [api, pages.items, remember])
+  const data = api
+    ? {
+        ...cached,
+        status:
+          pages.busy && !pages.items.length
+            ? 'loading'
+            : pages.error && !pages.items.length
+              ? 'error'
+              : 'success',
+        error: pages.error,
+        refresh: pages.refresh,
+      }
+    : cached
   const list = useRef<HTMLDivElement>(null)
   const pickedId = data.lots.find((lot) => picked && lot.memberIds.includes(picked))?.id
   const savedId = selected ? active.parkingSelections?.[selected.id] : undefined
@@ -61,26 +107,41 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
   useEffect(() => {
     list.current?.querySelector('.is-selected')?.scrollIntoView({ block: 'nearest' })
   }, [pickedId])
-  const rows = data.lots
-    .filter(
-      (lot): lot is ParkingFacility & { lat: number; lng: number } =>
-        lot.lat !== null && lot.lng !== null,
-    )
-    .map((lot) => ({
-      lot,
-      meters: Math.round(distanceMeters([base.lat, base.lng], [lot.lat, lot.lng])),
-    }))
-    .filter((row) => row.meters <= radius && (!query || row.lot.name.includes(query)))
-    .sort((a, b) => compareParkingRows(a, b, sort))
+  const rows = api
+    ? pages.items.map((item) => ({
+        lot: {
+          ...apiParkingLot(item.facility, item),
+          memberIds: [item.facility.parking_id],
+          lat: item.facility.coordinates.latitude,
+          lng: item.facility.coordinates.longitude,
+        },
+        meters: Math.round(item.facility.distance_meters),
+      }))
+    : data.lots
+        .filter(
+          (lot): lot is ParkingFacility & { lat: number; lng: number } =>
+            lot.lat !== null && lot.lng !== null,
+        )
+        .map((lot) => ({
+          lot,
+          meters: Math.round(distanceMeters([base.lat, base.lng], [lot.lat, lot.lng])),
+        }))
+        .filter((row) => row.meters <= (radius || 1000) && (!query || row.lot.name.includes(query)))
+        .sort((a, b) => compareParkingRows(a, b, sort))
   return (
     <>
       <PanelHeader
         title="주차장"
-        count={data.status === 'success' ? rows.length : undefined}
+        count={api ? pages.page?.total_count : data.status === 'success' ? rows.length : undefined}
         subtitle={
           <>
             <Icon name="pin" />
-            {base.label} 주변 · 반경 {radius >= 1000 ? `${radius / 1000}km` : `${radius}m`}
+            {base.label} 주변 ·{' '}
+            {nearby
+              ? pages.page?.radius_meters
+                ? `탐색 반경 ${pages.page.radius_meters}m`
+                : '가까운 범위 탐색'
+              : `반경 ${(radius || 1000) >= 1000 ? `${(radius || 1000) / 1000}km` : `${radius}m`}`}
           </>
         }
       />
@@ -104,6 +165,16 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
           </FilterChip>
         </div>
         <div className="sn-chips" role="group" aria-label="검색 반경 및 정렬">
+          <FilterChip
+            pressed={nearby}
+            onClick={() => {
+              setRadius(0)
+              setQuery('')
+              setSort('distance')
+            }}
+          >
+            가까운 범위
+          </FilterChip>
           {[500, 1000, 2000].map((r) => (
             <FilterChip key={r} pressed={radius === r} onClick={() => setRadius(r)}>
               {r >= 1000 ? `${r / 1000}km` : `${r}m`}
@@ -114,15 +185,20 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
             <span className="sr-only">주차장 정렬</span>
             <select value={sort} onChange={(event) => setSort(event.target.value as ParkingSort)}>
               <option value="distance">가까운 순</option>
-              <option value="available">빈자리 순</option>
               <option value="price">저렴한 순</option>
             </select>
           </label>
         </div>
+        {nearby && (
+          <p className="sn-note">
+            300m → 500m → 1km 중 등록 시설이 처음 확인되는 범위를 조회해요. 반경이나 정렬을 선택하면
+            전체 범위를 검색해요.
+          </p>
+        )}
         {sort === 'price' && (
           <p className="sn-note sn-parking-price-note">
-            기본요금을 1시간으로 환산한 순서예요. 추가요금·할인은 반영되지 않으며, 요금 미확인은
-            뒤에 표시해요.
+            기본요금을 1시간으로 환산한 순서예요. 추가요금·할인은 반영되지 않으며, 요금 미확인·원천
+            충돌은 뒤에 표시해요.
           </p>
         )}
         <SearchField
@@ -131,15 +207,18 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
           label="주차장 검색"
           placeholder="주차장 이름"
         />
-        {data.error && data.lots.length > 0 && (
+        {data.error && rows.length > 0 && (
           <div className="sn-banner" role="status">
             갱신하지 못해 이전 정보를 보여주고 있어요.
           </div>
         )}
-        {data.status === 'loading' && !data.lots.length ? (
+        {data.status === 'loading' && !rows.length ? (
           <LoadingSkeleton rows={4} />
-        ) : data.status === 'error' && !data.lots.length ? (
-          <ErrorState title="주차장 정보를 불러오지 못했어요" onRetry={() => void data.refresh()}>
+        ) : data.status === 'error' && !rows.length ? (
+          <ErrorState
+            title="주차장 정보를 불러오지 못했어요"
+            onRetry={pages.wait > 0 ? undefined : () => void data.refresh()}
+          >
             {data.error}
           </ErrorState>
         ) : rows.length ? (
@@ -198,7 +277,9 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
                         )}
                         {lot.source === 'mock' && <StatusBadge>예시 데이터</StatusBadge>}
                       </span>
-                      <span className="sn-place-meta">{parkingOperatingText(lot)}</span>
+                      <span className="sn-place-meta">
+                        {lot.api ? lot.feeStatus : parkingOperatingText(lot)}
+                      </span>
                       {sort === 'price' && hourlyBaseRate(lot) !== null && (
                         <span className="sn-place-meta sn-parking-price">
                           기본요금 환산 약{' '}
@@ -210,6 +291,7 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
                       )}
                     </span>
                   </button>
+                  {picked === lot.id && lot.api && <ParkingRegistration key={lot.id} lot={lot} />}
                   {picked === lot.id && selected && (
                     <div className="sn-parking-confirm">
                       <p>
@@ -222,7 +304,7 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
                       <small>직선거리 기반 추정이며 실제 도보 경로와 다를 수 있어요.</small>
                       <SecondaryButton
                         onClick={() => {
-                          selectParking(selected.id, lot.id)
+                          selectParking(selected.id, lot.id, lot)
                           // Navigate to the detail route atomically so the hash listener keeps it open.
                           window.location.hash = '/recommend/detail'
                           openDetail(selected.id)
@@ -240,6 +322,23 @@ export function ParkingPanel({ go }: { go: (route: Route) => void }) {
           <EmptyState title="이 범위에 주차장이 없어요">
             반경을 넓히거나 지도를 옮겨 다시 검색해 보세요.
           </EmptyState>
+        )}
+        {api && pages.page?.checked_at && (
+          <p className="sn-note">조회: {dateLabel(pages.page.checked_at)}</p>
+        )}
+        {pages.wait > 0 && <p role="status">{pages.wait}초 후 다시 조회할 수 있어요.</p>}
+        {api && pages.error && (
+          <SecondaryButton disabled={pages.wait > 0} onClick={pages.refresh}>
+            처음부터 다시 조회
+          </SecondaryButton>
+        )}
+        {api && pages.page?.next_cursor && (
+          <SecondaryButton
+            disabled={pages.busy || pages.wait > 0 || pages.expired}
+            onClick={pages.more}
+          >
+            주차장 더 보기
+          </SecondaryButton>
         )}
         <p className="sn-note">
           거리는 직선거리예요. 요금 정보가 없다고 무료는 아니며, 잔여 면수가 없으면 “정보 없음”으로
@@ -302,7 +401,9 @@ export function SavedPanel({ go }: { go: (route: Route) => void }) {
                     <strong>{saved.title}</strong>
                     <span className="sn-place-meta">{conditionText(saved.result.conditions)}</span>
                     <span className="sn-place-reason">
-                      {saved.result.entries.map((e) => placeById(e.id)?.name).join(' · ')}
+                      {saved.result.entries
+                        .map((e) => placeById(e.id, saved.result)?.name)
+                        .join(' · ')}
                     </span>
                     <span className="sn-place-meta">
                       {dateLabel(saved.savedAt)} 저장 · {saved.result.entries.length}곳

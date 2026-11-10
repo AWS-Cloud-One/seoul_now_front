@@ -1,6 +1,9 @@
 import type { ParkingLot } from './types'
-export type ParkingSort = 'distance' | 'available' | 'price'
-export function hourlyBaseRate(lot: Pick<ParkingLot, 'baseRate' | 'feeStatus'>): number | null {
+export type ParkingSort = 'distance' | 'price'
+export function hourlyBaseRate(
+  lot: Pick<ParkingLot, 'baseRate' | 'feeStatus' | 'api'>,
+): number | null {
+  if (lot.api) return lot.api.comparison?.hourly_base_comparison_krw ?? null
   if (lot.feeStatus?.trim() === '무료') return 0
   const rate = lot.baseRate
   if (
@@ -15,8 +18,6 @@ export function hourlyBaseRate(lot: Pick<ParkingLot, 'baseRate' | 'feeStatus'>):
 }
 type Row = { lot: ParkingLot; meters: number }
 export function compareParkingRows(a: Row, b: Row, sort: ParkingSort): number {
-  if (sort === 'available')
-    return (b.lot.available ?? -1) - (a.lot.available ?? -1) || a.meters - b.meters
   if (sort === 'price') {
     const left = hourlyBaseRate(a.lot),
       right = hourlyBaseRate(b.lot)

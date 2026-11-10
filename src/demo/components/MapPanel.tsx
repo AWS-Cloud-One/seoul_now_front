@@ -101,7 +101,7 @@ function Recommendations() {
       {result?.entries.length ? (
         <div className="compact-places">
           {result.entries.map((entry, index) => {
-            const place = placeById(entry.id)
+            const place = placeById(entry.id, result)
             if (!place) return null
             return (
               <button

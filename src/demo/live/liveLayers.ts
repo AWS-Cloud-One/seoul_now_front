@@ -55,14 +55,14 @@ export function createLiveLayers(
     for (const place of lastPlaces) {
       const color = LEVEL_COLORS[place.level]
       const selected = place.code === lastSelected
-      const polygon = L.polygon(place.ring, {
+      const polygon = L.polygon(place.polygons || [place.ring], {
         pane: 'live-places',
         bubblingMouseEvents: false,
         color,
         weight: selected ? 3 : 0,
         opacity: selected ? 1 : 0,
         fillColor: color,
-        fillOpacity: selected ? 0.12 : 0,
+        fillOpacity: selected ? 0.4 : place.stale ? 0.12 : 0.3,
       }).addTo(places)
       polygon.on('click', (event: { latlng: { lat: number; lng: number } }) =>
         options.onSelect(place, event.latlng),

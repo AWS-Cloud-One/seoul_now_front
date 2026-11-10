@@ -21,7 +21,7 @@ export function patchConditions(base: Conditions, patch: Partial<Conditions>): C
 export function validateConditions(value: Conditions): string
 export function conditionsEqual(a: Conditions, b: Conditions): boolean
 export function conditionChanges(a: Conditions, b: Conditions): string[]
-export function placeById(id: string | null | undefined): Place | undefined
+export function placeById(id: string | null | undefined, result?: Result | null): Place | undefined
 export const MockService: {
   recommend(request: {
     conditions: Conditions
