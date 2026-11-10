@@ -22,7 +22,7 @@ import { focusMap, FOOD_SELECT_EVENT, setMapOverlay } from './useRoute'
 import InformationMeta from '../InformationMeta'
 import { dateLabel } from '../../domain.js'
 import { usePages } from '../../../api/usePages'
-import { ROUTE_TRAFFIC } from '../../routing/traffic'
+import { ROUTE_ROAD_COLORS } from '../../routing/roadTraffic'
 import type { FoundPlaceData } from '../../../api/queries'
 import { foundPlace } from '../../routing/api'
 import { useSecondsRemaining } from '../../useSecondsRemaining'
@@ -125,10 +125,7 @@ export function RouteSection({
     setLocating('내 위치를 확인하는 중이에요…')
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setMe({
-          lat: position.coords.latitude,
-          lon: position.coords.longitude,
-        })
+        setMe({ lat: position.coords.latitude, lon: position.coords.longitude })
         setLocating(null)
       },
       (error) =>
@@ -146,10 +143,7 @@ export function RouteSection({
       routeSegments: state.status === 'done' ? state.data.segments || [] : null,
       origin:
         state.status === 'done' && origin
-          ? {
-              ...origin,
-              name: originOverride?.name || (chosen === ME ? '내 위치' : chosen),
-            }
+          ? { ...origin, name: originOverride?.name || (chosen === ME ? '내 위치' : chosen) }
           : null,
     })
     return () => setMapOverlay({ route: null, routeSegments: null, origin: null })
@@ -209,11 +203,16 @@ export function RouteSection({
           <p className="sn-note">
             지금 교통 상황 기준 추천 경로예요. 주차 시간과 도보 시간은 포함되지 않아요.
           </p>
-          <div className="sn-route-legend" aria-label="경로 교통 상태 색상">
-            {ROUTE_TRAFFIC.map((item) => (
-              <span key={item.state}>
-                <i style={{ background: item.color }} />
-                {item.label}
+          <p className="sn-note">
+            경로와 겹치는 서울 TOPIS 도로 관측을 참고 색상으로 표시해요. 미확인 구간은 연한
+            회색이며, 진행 방향별 소통과 다를 수 있어요.
+          </p>
+          <div className="sn-route-legend" aria-label="경로 위 도로 관측 속도">
+            {ROUTE_ROAD_COLORS.map(({ color, label }) => (
+              <span key={label}>
+                <i style={{ background: color }} />
+                {label}
+                {label === '미확인' ? '' : ' km/h'}
               </span>
             ))}
           </div>
@@ -240,13 +239,7 @@ export function NearbyShopsSection({ place }: { place: Target }) {
   const [started, setStarted] = useState(false)
   const pages = usePages<FoundPlaceData>(
     '/locations/places/nearby',
-    {
-      category: kind,
-      latitude: place.lat,
-      longitude: place.lon,
-      radius_meters: RADIUS,
-      limit: 10,
-    },
+    { category: kind, latitude: place.lat, longitude: place.lon, radius_meters: RADIUS, limit: 10 },
     started,
     0,
   )

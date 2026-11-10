@@ -1,7 +1,7 @@
 import type { MapRoadSegment } from '../live/store'
 import { useRoadTraffic } from '../live/useRoadTraffic'
 import { SEOUL_QUERY, type MapQuery } from '../../api/queries'
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { loadKakaoSdk } from '../kakaoSdk'
 import { useDemo } from '../useDemo'
@@ -24,8 +24,14 @@ import { livePopulationRecord } from '../live/populationLabels'
 import { populationHeat, containsPopulationPoint } from '../live/populationHeat'
 import { roadSpeedColor } from '../live/roadStyle'
 import Icon from './Icon'
-import { routeTrafficColor } from '../routing/traffic'
-import { arrowHtml, endpointHtml, routeArrows } from '../routing/mapSymbols'
+import { colorRouteByRoads, ROUTE_OUTLINE_COLOR } from '../routing/roadTraffic'
+import {
+  arrowHtml,
+  endpointHtml,
+  routeArrows,
+  routeLineWidths,
+  ROUTE_BACKDROP,
+} from '../routing/mapSymbols'
 
 type Drawable = { setMap(map: kakao.maps.Map | null): void }
 const position = (lat: number, lng: number) => new kakao.maps.LatLng(lat, lng)
@@ -78,6 +84,18 @@ export default function KakaoGeoMap({
   const { roads: cityTraffic, error: roadError } = useRoadTraffic(
     viewport,
     ready && needsRoadTraffic,
+  )
+  const coloredRoute = useMemo(
+    () =>
+      colorRouteByRoads(
+        overlay.route?.length
+          ? overlay.routeSegments?.length
+            ? overlay.routeSegments
+            : [{ path: overlay.route, state: 0 }]
+          : [],
+        overlay.route?.length ? cityTraffic : [],
+      ),
+    [overlay.route, overlay.routeSegments, cityTraffic],
   )
   const [focused, setFocused] = useState<string | null>(
     active.parkingSelections?.[active.selected || ''] || null,
@@ -229,10 +247,7 @@ export default function KakaoGeoMap({
     loadKakaoSdk(import.meta.env.VITE_KAKAO_MAP_APP_KEY!.trim())
       .then(() => {
         if (cancelled || !root.current) return
-        map = new kakao.maps.Map(root.current, {
-          center: position(37.5665, 126.978),
-          level: 9,
-        })
+        map = new kakao.maps.Map(root.current, { center: position(37.5665, 126.978), level: 9 })
         map.setMaxLevel(matchMedia('(max-width:900px)').matches ? 10 : 9)
         map.setMinLevel(1)
         instance.current = map
@@ -325,6 +340,7 @@ export default function KakaoGeoMap({
     const map = instance.current
     if (!ready || !map) return
     const items: Drawable[] = []
+    const routeLines: { item: kakao.maps.Polyline; outline: boolean }[] = []
     const line = (path: [number, number][], color: string, weight = 4, zIndex = 5) => {
       const item = new kakao.maps.Polyline({
         map,
@@ -335,6 +351,7 @@ export default function KakaoGeoMap({
         zIndex,
       })
       items.push(item)
+      return item
     }
     if (live.boundary?.length) {
       const world = [
@@ -354,13 +371,42 @@ export default function KakaoGeoMap({
       items.push(mask)
     }
     if (overlay.route?.length) {
-      line(overlay.route, '#294c3c', 15, 14)
-      line(overlay.route, routeTrafficColor(0), 11, 15)
-      for (const segment of overlay.routeSegments || [])
-        if (segment.path.length > 1) line(segment.path, routeTrafficColor(segment.state), 11, 16)
+      // Below routes and map overlays; the base-map labels remain readable.
+      items.push(
+        new kakao.maps.Polygon({
+          map,
+          path: ROUTE_BACKDROP.path.map((p) => position(...p)),
+          strokeWeight: 0,
+          fillColor: ROUTE_BACKDROP.color,
+          fillOpacity: ROUTE_BACKDROP.opacity,
+          zIndex: -1,
+        }),
+      )
+      for (const path of overlay.routeSegments?.length
+        ? overlay.routeSegments.map((s) => s.path)
+        : [overlay.route]) {
+        routeLines.push({ item: line(path, ROUTE_OUTLINE_COLOR, 4, 14), outline: true })
+      }
+      for (const segment of coloredRoute)
+        if (segment.path.length > 1)
+          routeLines.push({
+            item: line(segment.path, segment.color, 4, 16),
+            outline: false,
+          })
     }
-    return () => items.forEach((item) => item.setMap(null))
-  }, [ready, live.boundary, overlay.route, overlay.routeSegments])
+    const resizeRoute = () => {
+      const widths = routeLineWidths(20 - map.getLevel())
+      routeLines.forEach(({ item, outline }) =>
+        item.setOptions({ strokeWeight: outline ? widths.outline : widths.line }),
+      )
+    }
+    resizeRoute()
+    kakao.maps.event.addListener(map, 'zoom_changed', resizeRoute)
+    return () => {
+      kakao.maps.event.removeListener(map, 'zoom_changed', resizeRoute)
+      items.forEach((item) => item.setMap(null))
+    }
+  }, [ready, live.boundary, overlay.route, overlay.routeSegments, coloredRoute])
   useEffect(() => {
     const map = instance.current
     if (!ready || !map || !showRoadTraffic) return
@@ -621,7 +667,9 @@ export default function KakaoGeoMap({
         const node = document.createElement('div')
         node.className = 'sn-route-arrow-host'
         node.setAttribute('aria-hidden', 'true')
-        node.innerHTML = arrowHtml(mark.angle)
+        const arrowSize = routeLineWidths(20 - map.getLevel()).arrow
+        node.style.width = node.style.height = `${arrowSize}px`
+        node.innerHTML = arrowHtml(mark.angle, arrowSize)
         add(mark.lat, mark.lng, node, 25)
       }
     }
@@ -714,10 +762,7 @@ export default function KakaoGeoMap({
           } else {
             const lot = group[0]
             window.dispatchEvent(new CustomEvent(PARKING_SELECT_EVENT, { detail: { id: lot.id } }))
-            setRecord({
-              kind: 'parking',
-              data: { lat: lot.lat!, lng: lot.lng!, records: [lot] },
-            })
+            setRecord({ kind: 'parking', data: { lat: lot.lat!, lng: lot.lng!, records: [lot] } })
           }
         }
         add(lat, lng, button)
@@ -731,10 +776,7 @@ export default function KakaoGeoMap({
           () => {
             if (choices.length > 1) openChoices(choices)
             else
-              setRecord({
-                kind: 'parking',
-                data: { lat: lot.lat!, lng: lot.lng!, records: [lot] },
-              })
+              setRecord({ kind: 'parking', data: { lat: lot.lat!, lng: lot.lng!, records: [lot] } })
           },
           true,
         )
@@ -833,13 +875,7 @@ export default function KakaoGeoMap({
         <p
           className="sn-banner"
           role="status"
-          style={{
-            position: 'absolute',
-            bottom: 24,
-            left: 20,
-            zIndex: 20,
-            maxWidth: 320,
-          }}
+          style={{ position: 'absolute', bottom: 24, left: 20, zIndex: 20, maxWidth: 320 }}
         >
           {needsRoadTraffic && roadError
             ? `도로: ${roadError}`

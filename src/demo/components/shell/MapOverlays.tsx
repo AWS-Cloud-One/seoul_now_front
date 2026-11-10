@@ -8,6 +8,7 @@ import { fitMap, getMapOverlay, MAP_OVERLAY_EVENT } from './useRoute'
 import { useLive } from '../../live/store'
 import { POPULATION_HEAT_COLORS } from '../../live/populationHeat'
 import { ROAD_SPEED_COLORS } from '../../live/roadStyle'
+import { ROUTE_ROAD_COLORS } from '../../routing/roadTraffic'
 import { IconButton, PrimaryButton, SecondaryButton, StatusBadge } from './ui'
 
 const layerOptions = [
@@ -16,15 +17,20 @@ const layerOptions = [
   ['roads', '도로혼잡도', 'car'],
 ] as const
 
-export function LayerMenu() {
-  const { layers, toggleLayer } = useDemo()
-  const live = useLive()
+function useRouting() {
   const [routing, setRouting] = useState(() => !!getMapOverlay().route?.length)
   useEffect(() => {
     const update = () => setRouting(!!getMapOverlay().route?.length)
     window.addEventListener(MAP_OVERLAY_EVENT, update)
     return () => window.removeEventListener(MAP_OVERLAY_EVENT, update)
   }, [])
+  return routing
+}
+
+export function LayerMenu() {
+  const { layers, toggleLayer } = useDemo()
+  const live = useLive()
+  const routing = useRouting()
   return (
     <div className="sn-map-layers">
       <div className="sn-layer-buttons" role="group" aria-label="지도 표시 항목">
@@ -71,12 +77,13 @@ export function LayerMenu() {
 
 function useLegend() {
   const { layers } = useDemo()
+  const routing = useRouting()
   // Parking has no colour scale to explain, so it does not appear in the legend.
-  return { layers, any: layers.population || layers.roads }
+  return { layers, routing, any: layers.population || layers.roads || routing }
 }
 
 function LegendGroups() {
-  const { layers } = useLegend()
+  const { layers, routing } = useLegend()
   return (
     <>
       {layers.population && (
@@ -96,11 +103,11 @@ function LegendGroups() {
           </div>
         </section>
       )}
-      {layers.roads && (
+      {(layers.roads || routing) && (
         <section className="sn-lg" aria-label="도로 소통">
-          <h4>도로 소통 (km/h)</h4>
+          <h4>{routing ? '경로 위 도로 관측' : '도로 소통'} (km/h)</h4>
           <ul className="sn-lg-dots">
-            {ROAD_SPEED_COLORS.map(({ color, label }) => (
+            {(routing ? ROUTE_ROAD_COLORS : ROAD_SPEED_COLORS).map(({ color, label }) => (
               <li key={label}>
                 <i style={{ background: color }} />
                 {label}

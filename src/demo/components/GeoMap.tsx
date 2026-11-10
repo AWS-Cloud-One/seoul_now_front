@@ -1,6 +1,12 @@
 import KakaoGeoMap from './KakaoGeoMap'
-import { routeTrafficColor } from '../routing/traffic'
-import { arrowHtml, endpointHtml, routeArrows } from '../routing/mapSymbols'
+import { colorRouteByRoads, ROUTE_OUTLINE_COLOR } from '../routing/roadTraffic'
+import {
+  arrowHtml,
+  endpointHtml,
+  routeArrows,
+  routeLineWidths,
+  ROUTE_BACKDROP,
+} from '../routing/mapSymbols'
 import { SEOUL_VIEW_BOUNDS } from '../data/seoulBoundary'
 import markerIcons from '../data/icons.json'
 import { useRoadTraffic } from '../live/useRoadTraffic'
@@ -67,14 +73,24 @@ function LeafletGeoMap({
   const markers = useRef<Map<string, ReturnType<typeof L.marker>>>(new Map())
   const [status, setStatus] = useState('서울 지도를 불러오는 중이에요…')
   const [zoom, setZoom] = useState(12)
+  const routeLines = useRef<{ line: ReturnType<typeof L.polyline>; outline: boolean }[]>([])
+  useEffect(() => {
+    const widths = routeLineWidths(zoom)
+    routeLines.current.forEach(({ line, outline }) =>
+      line.setStyle({ weight: outline ? widths.outline : widths.line }),
+    )
+  }, [zoom])
   const [viewport, setViewport] = useState<MapQuery>(SEOUL_QUERY)
   const [routing, setRouting] = useState(() => !!getMapOverlay().route?.length)
   const { roads: cityTraffic, error: roadError } = useRoadTraffic(viewport, layers.roads || routing)
+  const routeRoads = useRef(cityTraffic)
+  const redrawRoute = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    routeRoads.current = cityTraffic
+    redrawRoute.current?.()
+  }, [cityTraffic])
   const retryTiles = useRef<() => void>(() => {})
-  const [popup, setPopup] = useState<{
-    record: RecordData
-    host: HTMLDivElement
-  } | null>(null)
+  const [popup, setPopup] = useState<{ record: RecordData; host: HTMLDivElement } | null>(null)
   const [parkingHint, setParkingHint] = useState(false)
   const zoomToParking = useRef<() => void>(() => {})
   const resultSnapshot = JSON.stringify(preview ? null : result)
@@ -142,45 +158,55 @@ function LeafletGeoMap({
       [target.x, target.y + (sheet?.offsetHeight ?? 300) / 2],
       instance.getZoom(),
     )
-    instance.panTo(shifted, {
-      animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
-    })
+    instance.panTo(shifted, { animate: !matchMedia('(prefers-reduced-motion: reduce)').matches })
   }, [active.selected, selectedLatitude, selectedLongitude])
   useEffect(() => {
     let group: ReturnType<typeof L.layerGroup> | null = null
-    const draw = (overlay: MapOverlay) => {
+    const draw = (overlay: MapOverlay, fit = true) => {
       const instance = map.current
       if (!instance) return
       group?.remove()
       group = null
+      routeLines.current = []
       if (!overlay.route?.length && !overlay.food?.length) return
       group = L.layerGroup().addTo(instance)
       if (overlay.route?.length) {
+        // Above base tiles, below all data layers and route markers.
+        if (!instance.getPane('sn-route-backdrop'))
+          instance.createPane('sn-route-backdrop').style.zIndex = '250'
+        L.polygon(ROUTE_BACKDROP.path, {
+          pane: 'sn-route-backdrop',
+          stroke: false,
+          fillColor: ROUTE_BACKDROP.color,
+          fillOpacity: ROUTE_BACKDROP.opacity,
+          interactive: false,
+        }).addTo(group)
         // Own pane above the observed roads so the route is never buried under them.
         if (!instance.getPane('sn-route')) instance.createPane('sn-route').style.zIndex = '450'
-        L.polyline(overlay.route, {
-          pane: 'sn-route',
-          color: '#294c3c',
-          weight: 15,
-          opacity: 1,
-          interactive: false,
-        }).addTo(group)
-        const line = L.polyline(overlay.route, {
-          pane: 'sn-route',
-          color: routeTrafficColor(0),
-          weight: 11,
-          opacity: 1,
-          interactive: false,
-        }).addTo(group)
-        for (const segment of overlay.routeSegments || []) {
-          if (segment.path.length > 1)
-            L.polyline(segment.path, {
-              pane: 'sn-route',
-              color: routeTrafficColor(segment.state),
-              weight: 11,
-              opacity: 1,
-              interactive: false,
-            }).addTo(group)
+        const widths = routeLineWidths(instance.getZoom())
+        const addRoute = (path: [number, number][], color: string, outline = false) => {
+          const line = L.polyline(path, {
+            pane: 'sn-route',
+            color,
+            weight: outline ? widths.outline : widths.line,
+            opacity: 1,
+            interactive: false,
+          }).addTo(group!)
+          routeLines.current.push({ line, outline })
+        }
+        for (const path of overlay.routeSegments?.length
+          ? overlay.routeSegments.map((s) => s.path)
+          : [overlay.route]) {
+          addRoute(path, ROUTE_OUTLINE_COLOR, true)
+        }
+        const segments = colorRouteByRoads(
+          overlay.routeSegments?.length
+            ? overlay.routeSegments
+            : [{ path: overlay.route, state: 0 }],
+          routeRoads.current,
+        )
+        for (const segment of segments) {
+          if (segment.path.length > 1) addRoute(segment.path, segment.color)
         }
         if (overlay.origin) {
           const origin = overlay.origin
@@ -209,11 +235,12 @@ function LeafletGeoMap({
           title: '도착 · ' + (destination?.name || '목적지'),
           zIndexOffset: 1800,
         }).addTo(group)
-        instance.fitBounds(line.getBounds(), {
-          paddingTopLeft: [64, 84],
-          paddingBottomRight: [64, bottomPadding()],
-          animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
-        })
+        if (fit)
+          instance.fitBounds(overlay.route, {
+            paddingTopLeft: [64, 84],
+            paddingBottomRight: [64, bottomPadding()],
+            animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
+          })
       }
       for (const food of overlay.food || []) {
         const marker = L.marker([food.lat, food.lng], {
@@ -237,6 +264,7 @@ function LeafletGeoMap({
       }
     }
     const listener = (event: Event) => draw((event as CustomEvent<MapOverlay>).detail)
+    redrawRoute.current = () => draw(getMapOverlay(), false)
     window.addEventListener('sn:map-overlay', listener)
     draw(getMapOverlay())
     const traffic = (event: Event) => {
@@ -249,6 +277,8 @@ function LeafletGeoMap({
       window.removeEventListener('sn:map-overlay', listener)
       window.removeEventListener('sn:map-overlay', traffic)
       group?.remove()
+      routeLines.current = []
+      redrawRoute.current = null
     }
   }, [])
   const initialView = useRef(preview ? undefined : active.workspaceView?.map)
@@ -291,9 +321,7 @@ function LeafletGeoMap({
     })
     map.current = instance
     const view = initialView.current
-    instance.setView(view?.center || [37.5665, 126.978], view?.zoom || 12, {
-      animate: false,
-    })
+    instance.setView(view?.center || [37.5665, 126.978], view?.zoom || 12, { animate: false })
     instance.attributionControl.setPrefix(
       '<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>',
     )
@@ -494,11 +522,7 @@ function LeafletGeoMap({
     if (!instance) return
     let controller: ReturnType<typeof createMapLayers> | undefined
     let cancelled = false
-    void Promise.resolve({
-      roads: cityTraffic,
-      population: { features: [] },
-      parking: [],
-    })
+    void Promise.resolve({ roads: cityTraffic, population: { features: [] }, parking: [] })
       .then((data) => {
         if (cancelled) return
         controller = createMapLayers(instance, {
@@ -576,6 +600,7 @@ function LeafletGeoMap({
       const path = getMapOverlay().route
       if (!path?.length || (getMapOverlay().routeSegments?.length || 0) > 1) return
       const size = instance.getSize()
+      const arrowSize = routeLineWidths(instance.getZoom()).arrow
       for (const mark of routeArrows(
         path,
         (point) => instance.latLngToContainerPoint(point),
@@ -588,9 +613,9 @@ function LeafletGeoMap({
           keyboard: false,
           icon: L.divIcon({
             className: 'sn-route-arrow-host',
-            html: arrowHtml(mark.angle),
-            iconSize: [10, 10],
-            iconAnchor: [5, 5],
+            html: arrowHtml(mark.angle, arrowSize),
+            iconSize: [arrowSize, arrowSize],
+            iconAnchor: [arrowSize / 2, arrowSize / 2],
           }),
         }).addTo(arrows)
       }
