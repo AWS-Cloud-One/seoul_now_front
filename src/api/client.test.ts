@@ -11,6 +11,24 @@ const error = {
 }
 afterEach(() => vi.useRealTimers())
 
+it('CDN Age를 보존하고 숨겨진 헤더는 0으로 추측하지 않는다', async () => {
+  const envelope = {
+    request_id: 'test',
+    server_time: FIXTURE_TIME,
+    data: { value: 1 },
+    error: null,
+  }
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(envelope, { headers: { Age: '240' } }))
+      .mockResolvedValueOnce(Response.json(envelope)),
+  )
+  expect((await client.request('/map/layers/parking/geometry')).cache?.ageSeconds).toBe(240)
+  expect((await client.request('/map/layers/parking/geometry')).cache?.ageSeconds).toBeNull()
+})
+
 it('503에서도 이미 적용된 조건과 오류·Retry-After를 보존하며 자동 재시도하지 않는다', async () => {
   const body = conversation({
     request_id: crypto.randomUUID(),

@@ -8,6 +8,8 @@ import DemoProvider from '../DemoProvider'
 import ConceptMap from '../components/ConceptMap'
 import { useParkingData } from './useParkingData'
 import type { ParkingSource } from './types'
+import { apiParkingLot } from './api'
+import { information } from '../../api/testFixtures'
 
 afterEach(() => {
   cleanup()
@@ -23,6 +25,33 @@ const row = {
   availableSpaces: 24,
   previewPosition: { x: 380, y: 365 },
 }
+it('저장한 주차 상세는 보존하되 새 위치 응답의 이름과 좌표를 반영한다', async () => {
+  const saved = apiParkingLot({
+    parking_id: 'one',
+    name: '이전 이름',
+    identity_status: 'verified',
+    coordinates: { latitude: 37.53, longitude: 126.97 },
+    distance_meters: 0,
+    records: [],
+    availability: information(null),
+  })
+  saved.address = '등록 상세 주소'
+  const updated = apiParkingLot({
+    ...saved.api!.facility,
+    name: '새 이름',
+    coordinates: { latitude: 37.55, longitude: 127.01 },
+  })
+  const store = createParkingStore({ kind: 'api', load: vi.fn().mockResolvedValue([updated]) }, 0)
+  store.remember([saved])
+  await store.refresh('map')
+  expect(store.getSnapshot('map').lots[0]).toMatchObject({
+    name: '새 이름',
+    lat: 37.55,
+    lng: 127.01,
+    address: '등록 상세 주소',
+    api: { facility: { coordinates: { latitude: 37.55, longitude: 127.01 } } },
+  })
+})
 it('응답의 0, 미제공, 잘못된 수치와 중복 ID를 안전하게 구분한다', () => {
   expect(normalizeParkingResponse({ items: [{ ...row, availableSpaces: '0' }] })[0].available).toBe(
     0,

@@ -22,6 +22,13 @@ export async function queryApi<T>(
   query: Record<string, string | number | boolean | undefined>,
   signal: AbortSignal,
 ): Promise<T> {
+  return (await queryApiResponse<T>(path, query, signal)).data
+}
+export async function queryApiResponse<T>(
+  path: string,
+  query: Record<string, string | number | boolean | undefined>,
+  signal: AbortSignal,
+) {
   const response = await apiClient.request<T>(path, { query, signal })
   if (!response.ok || !response.envelope.data)
     throw new QueryError(
@@ -30,7 +37,7 @@ export async function queryApi<T>(
       response.envelope.error?.code,
       Date.now() + (response.retryAfterSeconds || 0) * 1000,
     )
-  return response.envelope.data
+  return { ...response, data: response.envelope.data }
 }
 export type Position = [number, number]
 export type MapQuery = { bbox: [number, number, number, number]; level: number }

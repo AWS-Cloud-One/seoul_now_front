@@ -62,7 +62,7 @@ export const mockParkingSource: ParkingSource = {
 export const apiParkingSource: ParkingSource = {
   kind: 'api',
   async load(_scope, signal, query = SEOUL_QUERY) {
-    const data = await mapGeometry('parking', query, signal, true)
+    const data = await mapGeometry('parking', query, signal)
     return data.feature_collection.features.flatMap((feature) =>
       feature.geometry.type === 'Point'
         ? [
