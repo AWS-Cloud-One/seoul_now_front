@@ -5,6 +5,7 @@ export type ApiResponse<T> = {
   ok: boolean
   envelope: ApiEnvelope<T>
   retryAfterSeconds: number | null
+  cache?: { ageSeconds: number | null; elapsedMs: number }
 }
 export class ApiTransportError extends Error {
   constructor(
@@ -89,6 +90,7 @@ export function createApiClient(baseUrl = import.meta.env.VITE_API_BASE_URL || '
         timedOut = true
         controller.abort()
       }, options.timeoutMs ?? 30000)
+      const started = performance.now()
       try {
         const response = await fetch(url, {
           method: options.method || 'GET',
@@ -112,12 +114,17 @@ export function createApiClient(baseUrl = import.meta.env.VITE_API_BASE_URL || '
           )
         }
         controller.signal.throwIfAborted()
+        const age = response.headers.get('Age')
         // HTTP failures can contain an applied condition update. The caller must inspect data.
         return {
           status: response.status,
           ok: response.ok && body.error === null,
           envelope: body as ApiEnvelope<T>,
           retryAfterSeconds: retryAfter(response, body),
+          cache: {
+            ageSeconds: age !== null && /^\d+$/.test(age) ? Number(age) : null,
+            elapsedMs: performance.now() - started,
+          },
         }
       } catch (error) {
         if (options.signal?.aborted)

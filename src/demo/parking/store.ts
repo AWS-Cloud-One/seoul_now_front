@@ -58,7 +58,29 @@ export function createParkingStore(source: ParkingSource, refreshInterval = 3000
     try {
       const response = await source.load(scope, controller.signal, viewport)
       if (entry.version !== version || controller.signal.aborted) return
-      const lots = normalizeParkingResponse(response).map((lot) => remembered.get(lot.id) || lot)
+      const lots = normalizeParkingResponse(response).map((lot) => {
+        const saved = remembered.get(lot.id)
+        if (!saved?.api || !lot.api) return saved || lot
+        // Keep fetched registration details, but don't let them freeze a map pin's old location.
+        const merged: ParkingLot = {
+          ...saved,
+          name: lot.name,
+          lat: lot.lat,
+          lng: lot.lng,
+          kind: lot.kind,
+          api: {
+            ...saved.api,
+            facility: {
+              ...saved.api.facility,
+              name: lot.api.facility.name,
+              coordinates: lot.api.facility.coordinates,
+              identity_status: lot.api.facility.identity_status,
+            },
+          },
+        }
+        remembered.set(lot.id, merged)
+        return merged
+      })
       publish(scope, {
         lots: parkingFacilities([
           ...new Map([...lots, ...remembered.values()].map((lot) => [lot.id, lot])).values(),
