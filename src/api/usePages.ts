@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { queryApi, QueryError, type Page } from './queries'
-import { useSecondsRemaining } from '../demo/useSecondsRemaining'
+import { useSecondsRemaining } from '../hooks/useSecondsRemaining'
 
 const EMPTY: never[] = []
 const cache = new Map<string, { expires: number; page: unknown }>()

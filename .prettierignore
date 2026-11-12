@@ -6,9 +6,7 @@ package-lock.json
 agent/
 AGENTS.md
 
-# Original reference and third-party Leaflet source
-public/demo/original.html
-public/data/seoul-map.json
-src/demo/vendor/
+# Third-party Leaflet source
+src/vendor/
 # Preserve the supplied design styles and embedded font verbatim
-src/demo/styles/[0-9]*.css
+src/styles/design/

@@ -1,0 +1,31 @@
+// Example departure presets offered in the route search and used to place the
+// departure marker when the conditions have no server-verified origin.
+export type Departure = { lat: number; lon: number; region: string }
+export const DEPARTURES: Record<string, Departure> = {
+  서울역: { lat: 37.5547, lon: 126.9706, region: '서울' },
+  강남역: { lat: 37.4979, lon: 127.0276, region: '서울' },
+  홍대입구역: { lat: 37.5572, lon: 126.9245, region: '서울' },
+  인천시청: { lat: 37.4563, lon: 126.7052, region: '인천' },
+  수원역: { lat: 37.2661, lon: 126.9998, region: '경기' },
+  판교역: { lat: 37.3948, lon: 127.1112, region: '경기' },
+  성수역: { lat: 37.5445, lon: 127.0557, region: '서울' },
+  잠실역: { lat: 37.5133, lon: 127.1001, region: '서울' },
+  여의도역: { lat: 37.5216, lon: 126.9243, region: '서울' },
+  혜화역: { lat: 37.582, lon: 127.0018, region: '서울' },
+  안국역: { lat: 37.5765, lon: 126.9855, region: '서울' },
+  경복궁역: { lat: 37.5759, lon: 126.9736, region: '서울' },
+  이태원역: { lat: 37.5345, lon: 126.9946, region: '서울' },
+  건대입구역: { lat: 37.5404, lon: 127.0692, region: '서울' },
+  삼성역: { lat: 37.5089, lon: 127.063, region: '서울' },
+  선릉역: { lat: 37.5045, lon: 127.0489, region: '서울' },
+  서초역: { lat: 37.4919, lon: 127.0077, region: '서울' },
+  고속터미널역: { lat: 37.5048, lon: 127.0049, region: '서울' },
+  합정역: { lat: 37.5495, lon: 126.9137, region: '서울' },
+  망원역: { lat: 37.556, lon: 126.91, region: '서울' },
+  서울숲: { lat: 37.5445, lon: 127.0374, region: '서울' },
+  역삼역: { lat: 37.5006, lon: 127.0365, region: '서울' },
+  용산역: { lat: 37.5299, lon: 126.9648, region: '서울' },
+  한남역: { lat: 37.5345, lon: 127.006, region: '서울' },
+  영등포역: { lat: 37.5155, lon: 126.9076, region: '서울' },
+  송파역: { lat: 37.4997, lon: 127.1129, region: '서울' },
+}

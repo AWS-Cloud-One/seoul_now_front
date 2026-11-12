@@ -8,7 +8,7 @@ import {
   type MapGeometry,
   type MapStatus,
 } from './queries'
-import { parseMapPopulation, fetchRoadTraffic } from '../demo/live/store'
+import { parseMapPopulation, fetchRoadTraffic } from '../state/live/store'
 import { bufferedViewport } from './mapViewport'
 import { information } from './testFixtures'
 vi.mock('./queries', async (original) => ({

@@ -1,0 +1,125 @@
+import type {
+  ContextResult,
+  ConversationData,
+  Location,
+  Purpose,
+  ServerTrip,
+} from '../api/contracts'
+
+export type Conditions = {
+  origin?: Location | null
+  purposeKeywords?: Partial<Record<Purpose, string | null>>
+  departure: string | null
+  purposes: string[]
+  keyword: string | null
+  group: string | null
+  ages: string[]
+  headcount: number | null
+  maxMinutes: number | null
+}
+export type Parking = {
+  name: string
+  distance: number
+  source: string
+  measured: string
+  collected: string
+}
+export type Place = {
+  id: string
+  name: string
+  category: string
+  area: string
+  district?: string
+  lat: number
+  lon: number
+  address: string
+  description?: string
+  photoUrl?: string | null
+  tags?: string[]
+  parking: Parking[] | null
+  parkingRadius: number | null
+}
+export type Entry = {
+  id: string
+  place?: Place
+  photoUrl?: string | null
+  eta: number | null
+  queryTime: string
+  reason: string
+  parkingUnknown?: boolean
+  sourceStatus: string
+}
+export type Result = {
+  id: string
+  api?: { tripId: string; conditionVersion: number; result: ContextResult }
+  number?: number
+  entries: Entry[]
+  conditions: Conditions
+  time: string
+}
+export type Message = {
+  role: string
+  text: string
+  time: string
+  resultId?: string
+  place?: string
+  kind?: string
+  answer?: ConversationData['answer']
+  taskResults?: ConversationData['task_results']
+}
+export type Layers = { roads: boolean; parking: boolean; population: boolean }
+export type MapView = { center?: [number, number]; zoom?: number; resultId?: string }
+export type Trip = {
+  schema: number
+  api?: ServerTrip
+  trip: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  conditionVersion: number
+  conditions: Conditions
+  onboardingComplete: boolean
+  onboardingDraft: Conditions
+  groups: Result[]
+  seen: string[]
+  excluded: string[]
+  general: Result | null
+  chat: Message[]
+  parkingDetails?: Record<string, import('../lib/parking/facilities').ParkingFacility>
+  parkingSelections?: Record<string, string>
+  pendingChat: { patch: Partial<Conditions>; need?: string } | null
+  current: string | null
+  selected: string | null
+  view: string
+  sequence: number
+  retainedResult: { id: string; reason: string } | null
+  workspaceView: {
+    layers?: Layers
+    layerDefaultsVersion?: number
+    map?: MapView
+    chatDraft?: string
+    notice?: Notice | null
+  } | null
+}
+export type Store = { schema: number; activeTripId: string; trips: Trip[] }
+export type SavedTrip = {
+  id: string
+  api?: ServerTrip
+  sourceTripId: string
+  title: string
+  savedAt: string
+  result: Result
+  parkingDetails?: Record<string, import('../lib/parking/facilities').ParkingFacility>
+  parkingSelections?: Record<string, string>
+  selectedId: string | null
+  general: boolean
+  layers: Layers
+}
+export type Progress = {
+  mode: string
+  stage: string
+  detail: string
+  conditions: Conditions | null
+}
+export type Notice = { text: string; edit?: boolean; type?: string }
+export type Panel = { type: string; tripId?: string; placeId?: string }

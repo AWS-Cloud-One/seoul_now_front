@@ -3,7 +3,7 @@ import { apiClient, type ApiRequestOptions, type ApiResponse } from './client'
 import { mapGeometry, mapLayer, clearMapCache } from './mapLayers'
 import { bufferedViewport, containsViewport } from './mapViewport'
 import { type MapGeometry, type MapQuery } from './queries'
-import { apiParkingSource } from '../demo/parking/source'
+import { apiParkingSource } from './parking/source'
 
 vi.mock('./client', () => ({ apiClient: { request: vi.fn() } }))
 const viewport: MapQuery = { bbox: [126.95, 37.54, 127.03, 37.59], level: 6 }
@@ -99,7 +99,7 @@ it('인구 고정 범위를 넓히지 않으며 일반 주차 조회는 CDN 우�
   await mapGeometry('population', viewport, signal())
   expect(request.mock.calls[0][1]?.query?.bbox).toBe(viewport.bbox.join(','))
   await apiParkingSource.load('map', signal(), viewport)
-  await apiParkingSource.load('preview', signal(), viewport)
+  await apiParkingSource.load('map', signal(), viewport)
   expect(request).toHaveBeenCalledTimes(2)
   expect(request.mock.calls[1][1]?.query).not.toHaveProperty('cache_refresh')
 })
