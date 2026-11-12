@@ -83,7 +83,7 @@ export default function AppShell() {
   const visibleViewport = useVisualViewport()
   const hasResult = !!result
   useEffect(() => {
-    document.title = `${NAV.find((n) => n.route === route)!.label} · 서울, 지금 어디?`
+    document.title = `${NAV.find((n) => n.route === route)!.label} · 밖과사전`
   }, [route])
   const select = (next: Route) => {
     go(next)
