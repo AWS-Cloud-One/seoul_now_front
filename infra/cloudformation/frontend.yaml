@@ -1,0 +1,198 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Seoul Now frontend comparison release. Each release owns a private S3 origin
+  and a separate CloudFront HTTPS address so later versions do not replace it.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    must:
+      - Create a separate stack for each comparison release.
+      - Publish only the reviewed Vite build; never upload source or env files.
+      - Backend CORS and Kakao domain registration are separate integration steps.
+Parameters:
+  ProjectName:
+    Type: String
+    Default: seoul-now
+    AllowedPattern: '[a-z][a-z0-9-]{1,30}'
+  Environment:
+    Type: String
+    Default: lab
+    AllowedValues: [lab, staging, prod]
+  ReleaseLabel:
+    Type: String
+    Default: v1
+    AllowedPattern: 'v[0-9]+(-[a-z0-9-]+)?'
+    MaxLength: 20
+  SourceCommit:
+    Type: String
+    AllowedPattern: '[a-f0-9]{40}'
+    Description: Exact merged frontend commit used for this comparison release.
+  SecurityHeadersPolicyId:
+    Type: String
+    Default: 67f7725c-6f97-4210-82d7-5512b31e9d03
+    AllowedPattern: '[a-f0-9-]{36}'
+    Description: AWS managed SecurityHeadersPolicy; verified before deployment.
+Resources:
+  WebBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Independent release files without changing the backend foundation bucket.
+        must:
+          - Keep public access blocked and retain the baseline files.
+          - Use the S3 REST origin, not a public website endpoint.
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Release
+          Value: !Ref ReleaseLabel
+        - Key: SourceCommit
+          Value: !Ref SourceCommit
+  WebBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Permit reads only from this distribution and reject plaintext S3 access.
+        must:
+          - Keep the CloudFront SourceArn restriction and TLS deny.
+    Properties:
+      Bucket: !Ref WebBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt WebBucket.Arn
+              - !Sub '${WebBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+          - Sid: AllowReleaseDistribution
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${WebBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}'
+  WebOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Signed HTTPS requests let CloudFront read a private S3 bucket.
+        must:
+          - Always sign origin requests.
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  WebCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Honor no-cache HTML and long-lived content-hashed assets from upload metadata.
+        must:
+          - Keep MinTTL zero so index.html can require revalidation.
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub '${AWS::StackName}-static'
+        MinTTL: 0
+        DefaultTTL: 300
+        MaxTTL: 31536000
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+  WebDistribution:
+    Type: AWS::CloudFront::Distribution
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Separate HTTPS address for each comparison release; browser calls the existing API.
+        must:
+          - Do not point this baseline distribution at a later release.
+          - Keep API calls out of the static origin and register this origin in backend CORS.
+          - Hash navigation needs no blanket 403/404-to-HTML rewrite.
+    Properties:
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Release
+          Value: !Ref ReleaseLabel
+        - Key: SourceCommit
+          Value: !Ref SourceCommit
+      DistributionConfig:
+        Comment: !Sub '${ProjectName}-${Environment} frontend ${ReleaseLabel}'
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_200
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: web
+            DomainName: !GetAtt WebBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt WebOriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: web
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          CachePolicyId: !Ref WebCachePolicy
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicyId
+          Compress: true
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ErrorCachingMinTTL: 0
+Outputs:
+  WebBucketName:
+    Description: Upload only this release's dist contents to this private bucket.
+    Value: !Ref WebBucket
+  DistributionId:
+    Description: CloudFront distribution dedicated to this release.
+    Value: !Ref WebDistribution
+  FrontendUrl:
+    Description: HTTPS origin to register in backend CORS and Kakao JavaScript domains.
+    Value: !Sub 'https://${WebDistribution.DomainName}'
+  SourceCommit:
+    Description: Frozen frontend source commit; keep the matching build manifest locally.
+    Value: !Ref SourceCommit
