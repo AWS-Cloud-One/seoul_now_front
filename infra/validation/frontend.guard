@@ -1,0 +1,54 @@
+# Project-specific checks for a private, independently deployed frontend release.
+rule private_release_files {
+    Resources.WebBucket {
+        DeletionPolicy == 'Retain'
+        UpdateReplacePolicy == 'Retain'
+        Properties {
+            PublicAccessBlockConfiguration {
+                BlockPublicAcls == true
+                IgnorePublicAcls == true
+                BlockPublicPolicy == true
+                RestrictPublicBuckets == true
+            }
+            BucketEncryption.ServerSideEncryptionConfiguration.*.ServerSideEncryptionByDefault.SSEAlgorithm == 'AES256'
+            VersioningConfiguration.Status == 'Enabled'
+            OwnershipControls.Rules.*.ObjectOwnership == 'BucketOwnerEnforced'
+            WebsiteConfiguration !exists
+        }
+    }
+    Resources.WebBucketPolicy.Properties.PolicyDocument.Statement[ Sid == 'DenyInsecureTransport' ] {
+        Effect == 'Deny'
+        Condition.Bool.'aws:SecureTransport' == 'false'
+    }
+    Resources.WebBucketPolicy.Properties.PolicyDocument.Statement[ Sid == 'AllowReleaseDistribution' ] {
+        Principal.Service == 'cloudfront.amazonaws.com'
+        Action == 's3:GetObject'
+        Condition.StringEquals.'AWS:SourceArn'.'Fn::Sub' == 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}'
+    }
+}
+rule https_release_address {
+    Resources.WebOriginAccessControl.Properties.OriginAccessControlConfig {
+        OriginAccessControlOriginType == 's3'
+        SigningBehavior == 'always'
+        SigningProtocol == 'sigv4'
+    }
+    Resources.WebDistribution.Properties.DistributionConfig {
+        Enabled == true
+        DefaultRootObject == 'index.html'
+        ViewerCertificate.CloudFrontDefaultCertificate == true
+        DefaultCacheBehavior {
+            ViewerProtocolPolicy == 'redirect-to-https'
+            AllowedMethods == ['GET', 'HEAD']
+            ResponseHeadersPolicyId.Ref == 'SecurityHeadersPolicyId'
+        }
+        Origins.* {
+            OriginAccessControlId.'Fn::GetAtt' == ['WebOriginAccessControl', 'Id']
+            S3OriginConfig.OriginAccessIdentity == ''
+        }
+        CustomErrorResponses.* {
+            ErrorCachingMinTTL == 0
+            ResponseCode !exists
+        }
+    }
+    Resources.WebCachePolicy.Properties.CachePolicyConfig.MinTTL == 0
+}
