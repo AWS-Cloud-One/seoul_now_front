@@ -2,24 +2,22 @@
 
 서울 여행 중 다음 방문 장소를 비교하고 선택하는 웹 화면을 개발하는 저장소입니다.
 
-기본 화면(`/`)은 전달받은 **서울_지금_어디_데모.html**을 **React 컴포넌트로 변환**한 화면입니다. 시작 화면, 지도 미리보기, 조건 입력, 대화, 추천 카드, 장소 상세, 여행별 이름·삭제·기록을 React 상태로 관리합니다. **AI 응답과 실시간 정보는 원본의 모의 데이터이며 백엔드 API에 연결되지 않습니다.** 지도 배경 타일은 인터넷 연결이 필요합니다.
+기본 화면(`/`)은 전달받은 **서울_지금_어디_데모.html**을 **React 컴포넌트로 변환**한 화면입니다. 시작 화면, 지도 미리보기, 조건 입력, 대화, 추천 카드, 장소 상세, 여행별 이름·삭제·기록을 React 상태로 관리합니다. 추천·대화·지도·주차·길찾기는 **백엔드 API**(`src/api/`, 기본 `/api/v1`)를 사용합니다. 지도 배경 타일은 인터넷 연결이 필요합니다.
 
 - 실행: 프로젝트 루트에서 `npm ci` 후 `npm run dev` → http://127.0.0.1:5173/
-- 진입점: `index.html` → `src/main.tsx` → `src/App.tsx`
-- 화면 컴포넌트: `src/demo/components/` (시작·미리보기·대화·조건 폼·지도·장소 상세·여행 메뉴·대화상자)
-- 여행·요청 상태: `src/demo/state.ts`, `DemoProvider.tsx`, `useDemo.ts`. 원본과 같은 세션 저장 키를 사용해 기존 여행도 복원합니다.
-- 원본 추천·대화 해석 로직: `src/demo/domain.js` (형식 선언은 `domain.d.ts`)
-- 도로·주차·인구 지도 자료: `public/data/seoul-map.json`. 지도가 필요할 때만 로드합니다. 지도 SDK와 캔버스 레이어의 생성·해제는 `GeoMap.tsx`, `mapLayers.js`에서 관리하며 정보 팝업은 React portal로 렌더링합니다.
-- 스타일: `src/demo/styles/` (원본 순서 유지), 이미지: `public/images/`
-- 기존 React/API 지도 화면: http://127.0.0.1:5173/developer.html (`src/LegacyApp.tsx`, 기존 환경변수와 백엔드 사용)
+- 진입점: `index.html` → `src/main.tsx` → `src/App.tsx` → `src/pages/` (시작 화면 `StartScreen.tsx`, 작업 화면 `AppShell.tsx`)
+- 화면 조각: `src/components/<기능>/` (대화·추천·장소·길찾기·지도·주차·저장·작업 화면·공통)
+- 여행·요청 상태: `src/state/appState.ts`, `AppStateProvider.tsx`, `useAppState.ts`. 세션 복원은 `tripStorage.ts`이며 원본과 같은 세션 저장 키를 사용해 기존 여행도 복원합니다.
+- 조건·여행 공통 처리: `src/lib/domain.js`(형식 선언 `domain.d.ts`). 출발지 예시 목록은 `src/lib/departures.ts`. 장소 정보는 서버 응답의 스냅샷만 사용합니다(로컬 장소 목록·모의 추천 없음).
+- 도로·주차·인구 지도 자료는 백엔드 지도 API(`src/api/mapLayers.ts`)에서 받습니다. 지도 SDK와 캔버스 레이어의 생성·해제는 `src/components/map/GeoMap.tsx`, `src/lib/map/mapLayers.js`에서 관리하며 정보 팝업은 React portal로 렌더링합니다.
+- 스타일: `src/styles/index.css`가 순서대로 불러옵니다(원본 디자인 CSS는 `src/styles/design/`, 순서 유지). 글꼴: `src/assets/fonts/`, 이미지: `public/images/`
 - 저장한 여행: 추천 결과의 **여행 저장** 또는 챗봇 아래 **북마크 메뉴 → 현재 추천 저장**으로 보관합니다. 저장 목록은 `localStorage`의 `seoul-saved-trips-v1`에 유지되며, 목록을 누르면 새 요청 없이 저장 당시 추천·조건·선택 장소를 복원합니다. 최근 5개 추천 기록이나 세션 여행이 삭제돼도 저장본은 유지됩니다.
-- 현재 화면 검증: `src/demo/currentScreen.test.tsx`에서 시작 화면·주요 메뉴 이동·필수 이미지와 글꼴을 직접 검증합니다.
+- 현재 화면 검증: `src/__tests__/currentScreen.test.tsx`에서 시작 화면·주요 메뉴 이동·필수 이미지와 글꼴을 직접 검증합니다.
 - 검증: `npm run typecheck`, `npm run lint`, `npm run test -- --maxWorkers=1`, `npm run build`
-- `npm run build` 시 두 진입점이 모두 `dist/`에 생성됩니다.
+- `npm run build` 결과는 `dist/`에 생성됩니다.
 
-> 처음 참여했다면 **작업 위치 알아보기 → 처음 실행하기 → 다음 날 다시 개발할 때** 순서로 읽어 주세요. 기본 실행에는 백엔드 서버나 지도 키가 필요하지 않습니다.
+> 처음 참여했다면 **작업 위치 알아보기 → 처음 실행하기 → 다음 날 다시 개발할 때** 순서로 읽어 주세요. 추천·대화 등 API 기능은 백엔드 연결이 필요합니다([환경변수와 백엔드 연결 준비](#환경변수와-백엔드-연결-준비)).
 
-화면설계 자료: [화면설계서 1차구현](docs/design/README.md)
 
 - [작업 위치 알아보기](#작업-위치-알아보기)
 - [처음 실행하기](#처음-실행하기)
@@ -35,30 +33,36 @@
 
 처음부터 설정 파일을 모두 이해할 필요는 없습니다. 실제 기능을 개발할 때는 **`src/` 안에서 작업**하면 됩니다.
 
-| 하고 싶은 작업                         | 작성할 위치       | 쉽게 말하면                                    |
-| -------------------------------------- | ----------------- | ---------------------------------------------- |
-| 홈·추천 등 화면 전체 구성              | `src/pages/`      | 한 화면의 배치를 조립하는 곳                   |
-| 버튼·카드처럼 여러 곳에서 쓰는 UI 작성 | `src/components/` | 화면을 이루는 작은 조각을 모아 두는 곳         |
-| 백엔드에 요청 보내기                   | `src/api/`        | 서버와 데이터를 주고받는 함수                  |
-| 조회·위치 등 React 동작 재사용         | `src/hooks/`      | 여러 컴포넌트에서 반복되는 상태·동작을 묶는 곳 |
-| 여행 조건·대화·이력 관리               | `src/state/`      | 화면들이 함께 쓰는 상태와 저장 처리            |
-| 요청·응답 등 데이터 형식 정의          | `src/types/`      | 데이터에 어떤 항목이 들어오는지 정의하는 곳    |
-| 공통 스타일 작성                       | `src/styles/`     | Tailwind 진입점과 공통 CSS                     |
+| 하고 싶은 작업                         | 작성할 위치                    | 쉽게 말하면                                                  |
+| -------------------------------------- | ------------------------------ | ------------------------------------------------------------ |
+| 시작·작업 화면 전체 구성               | `src/pages/`                   | 한 화면의 배치를 조립하는 곳                                 |
+| 버튼·카드·패널 같은 UI 작성            | `src/components/<기능>/`       | 화면을 이루는 조각. 여러 기능이 쓰는 것은 `common/`          |
+| 백엔드에 요청 보내기                   | `src/api/`                     | 서버와 데이터를 주고받는 함수와 캐시 (`parking/`, `routing.ts`) |
+| 조회·위치 등 React 동작 재사용         | `src/hooks/`                   | 여러 컴포넌트에서 반복되는 상태·동작을 묶는 곳               |
+| 여행 조건·대화·이력 관리               | `src/state/`                   | 화면들이 함께 쓰는 상태, Provider, 저장 처리                 |
+| 요청·응답 등 데이터 형식 정의          | `src/types/`                   | 화면 상태 타입. API 계약 타입은 `src/api/contracts.ts`       |
+| React와 무관한 계산·변환·지도 그리기   | `src/lib/`                     | 조건 처리, 지도 레이어(`map/`), 주차 표시 규칙(`parking/`)   |
+| 공통 스타일 작성                       | `src/styles/`                  | `index.css`가 불러오는 순서가 곧 적용 순서                   |
 
 ```text
 seoul_now_front/
 ├── public/                 # 이미지 등 그대로 제공할 정적 파일
 ├── src/
-│   ├── api/
-│   ├── components/
+│   ├── __tests__/          # 앱 전체를 렌더링하는 흐름 테스트 (모듈 테스트는 대상 파일 옆)
+│   ├── api/                # 서버 통신·캐시 (parking/, routing.ts, contracts.ts)
+│   ├── assets/fonts/       # 글꼴과 라이선스
+│   ├── components/         # chat, common, directions, map, parking, place,
+│   │                       # recommendation, saved, workspace
+│   ├── data/               # 서울 경계 등 정적 자료
 │   ├── hooks/
-│   ├── pages/
-│   ├── state/
+│   ├── lib/                # 순수 처리 (map/, parking/, departures.ts)
+│   ├── pages/              # StartScreen.tsx(시작), AppShell.tsx(작업 화면)
+│   ├── state/              # appState.ts, AppStateProvider.tsx, live/, parking/
+│   ├── styles/             # index.css(진입점), design/(원본 CSS), typography.css
 │   ├── types/
-│   ├── styles/
-│   │   └── global.css      # Tailwind를 불러오는 공통 CSS
-│   ├── App.tsx             # React로 변환한 서울 나들이 화면의 최상위 컴포넌트
-│   ├── main.tsx            # React 앱의 시작점
+│   ├── vendor/             # Leaflet 원본
+│   ├── App.tsx             # 기본 화면의 최상위 컴포넌트
+│   ├── main.tsx            # 기본 화면 시작점
 │   ├── test-setup.ts       # 테스트 공통 설정
 │   └── vite-env.d.ts       # 환경변수 타입 선언
 ├── index.html              # 브라우저가 처음 읽는 HTML
@@ -72,9 +76,7 @@ seoul_now_front/
 └── README.md
 ```
 
-현재 기능별 폴더에는 `.gitkeep`만 있습니다. Git은 빈 폴더를 저장하지 않기 때문에 구조를 유지하려고 넣어 둔 파일입니다. 실제 코드가 생기면 삭제해도 됩니다.
-
-`main.tsx`가 앱을 시작하고 `App.tsx`를 렌더링합니다. 이후 `pages/`에 만든 화면을 `App.tsx`에 연결하면 화면이 나타납니다. `@/`는 `src/`를 줄여 쓰는 경로 별칭입니다. 예를 들어 `@/pages/HomePage`는 `src/pages/HomePage`를 뜻하며, 이 파일은 아직 없습니다.
+`main.tsx`가 앱을 시작하고 `App.tsx`가 `pages/`의 시작 화면 또는 작업 화면을 렌더링합니다. `@/`는 `src/`를 줄여 쓰는 경로 별칭입니다. 예를 들어 `@/pages/AppShell`은 `src/pages/AppShell.tsx`를 뜻합니다.
 
 ## 처음 실행하기
 
@@ -171,7 +173,6 @@ npm install -D 패키지명@버전
 | React / React DOM              | 19.2.9           | 화면을 컴포넌트로 구성          |
 | TypeScript                     | 5.9.3            | 데이터 타입과 코드 오류 검사    |
 | Vite                           | 7.3.7            | 개발 서버 실행·배포 파일 생성   |
-| Tailwind CSS                   | 4.1.18           | 화면 스타일                     |
 | TanStack Query                 | 5.104.4          | 서버 조회의 로딩·실패·캐시 관리 |
 | Vitest / React Testing Library | 4.1.12 / 16.3.3  | 로직과 화면 동작 검사           |
 | ESLint / Prettier              | 10.13.0 / 3.9.10 | 코드 규칙 검사·포맷 통일        |
@@ -333,4 +334,3 @@ Docker 빌드는 `.env`를 읽지 않습니다. 향후 지도용 JavaScript 키 
 
 </details>
 
-주차장 API 교체 방법과 응답 계약: [docs/parking-api.md](docs/parking-api.md).

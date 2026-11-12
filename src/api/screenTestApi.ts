@@ -1,8 +1,17 @@
 import { vi } from 'vitest'
 import type { ApiConditions, RecommendationRequest } from './contracts'
 import { apiConditions, contextResult, conversation, FIXTURE_TIME } from './testFixtures'
+import { EMPTY_CONDITIONS } from '../lib/domain.js'
+import type { Conditions } from '../types/trip'
 
 export const screenOrigin = { ...apiConditions.origin!, label: '서울역' }
+/** Form conditions with a server-verified origin, as after picking 서울역 in the search. */
+export const screenConditions: Conditions = {
+  ...EMPTY_CONDITIONS,
+  departure: screenOrigin.label,
+  origin: structuredClone(screenOrigin),
+  purposes: ['카페'],
+}
 export function screenRecommendation(request: RecommendationRequest, sequence = 1) {
   const conditions = { ...request.current_conditions, ...request.conditions_patch } as ApiConditions
   const result = contextResult()
