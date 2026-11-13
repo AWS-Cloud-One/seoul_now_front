@@ -1,46 +1,42 @@
 import type { Information } from '../../api/contracts'
 import { dateLabel } from '../../lib/domain.js'
+import { sourceName } from '../../lib/sourceNames'
 
-const statuses = {
-  available: '확인됨',
+// One short source line under a value. Availability and freshness stay visible (users must be
+// able to tell missing, failed and old values apart); internal reason codes are only translated
+// when they add something the status does not already say.
+const statuses: Record<Information<unknown>['status'], string | null> = {
+  available: null,
   unavailable: '미확인',
   unsupported: '제공하지 않음',
   error: '조회 오류',
 }
-const freshness = {
-  fresh: '최신',
+const freshness: Record<Information<unknown>['freshness'], string | null> = {
+  fresh: null,
   stale: '오래된 정보',
   unknown: '최신성 미확인',
-  not_applicable: '최신성 비교 대상 아님',
+  not_applicable: null,
 }
-const sources: Record<string, string> = {
-  kakao: '카카오',
-  kakao_local: '카카오 장소',
-  kakao_mobility: '카카오모빌리티',
+const reasons: Record<string, string> = {
+  NOT_OBSERVED: '관측값 없음',
+  NOT_SUPPORTED: '이 지역은 제공하지 않음',
+  STALE: '갱신 지연',
 }
 export default function InformationMeta({ information }: { information: Information<unknown> }) {
+  const parts = [
+    statuses[information.status],
+    sourceName(information.source),
+    information.observed_at && `관측 ${dateLabel(information.observed_at)}`,
+    information.collected_at && `수집 ${dateLabel(information.collected_at)}`,
+    freshness[information.freshness],
+    information.reason_code && reasons[information.reason_code],
+  ].filter(Boolean)
   return (
-    <p className="sn-note">
-      {statuses[information.status]} · {freshness[information.freshness]} · 출처:{' '}
-      {information.source ? sources[information.source] || information.source : '미확인'}
-      {information.observed_at && (
-        <>
-          <br />
-          원천 시각: {dateLabel(information.observed_at)}
-        </>
-      )}
-      {information.collected_at && (
-        <>
-          <br />
-          수집 시각: {dateLabel(information.collected_at)}
-        </>
-      )}
-      {information.reason_code && (
-        <>
-          <br />
-          미확인 사유: {information.reason_code}
-        </>
-      )}
+    <p
+      className="sn-meta"
+      title={information.reason_code ? `사유 코드: ${information.reason_code}` : undefined}
+    >
+      {parts.join(' · ')}
     </p>
   )
 }

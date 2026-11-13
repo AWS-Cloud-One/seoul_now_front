@@ -37,3 +37,6 @@ for (const name of ['localStorage', 'sessionStorage'] as const) {
   if (!usable)
     Object.defineProperty(globalThis, name, { value: new MemoryStorage(), configurable: true })
 }
+// The shared departure is module state: forget it between tests (imported after the storage
+// fallback above, since the module restores from sessionStorage when it loads).
+afterEach(async () => (await import('./state/origin')).resetOrigin())

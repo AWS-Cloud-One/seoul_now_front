@@ -7,7 +7,8 @@ import type { Result } from '../../types/trip'
 import InformationMeta from '../common/InformationMeta'
 import Icon from '../common/Icon'
 import { NearbyShopsSection, RouteSection } from './RouteSections'
-import { PanelHeader, PrimaryButton, SecondaryButton } from '../common/ui'
+import { FactRows, LoadingNote, PanelHeader, PrimaryButton, SecondaryButton } from '../common/ui'
+import { sourceName } from '../../lib/sourceNames'
 import { setMapOverlay, type Route } from '../../hooks/useRoute'
 
 export default function ApiPlaceDetail({
@@ -119,11 +120,15 @@ export default function ApiPlaceDetail({
         </section>
         <section className="sn-section" aria-label="장소 상세 조회">
           <h3>장소 정보와 등록 주차</h3>
-          {detail.busy && <p role="status">상세 정보를 확인하고 있어요…</p>}
+          {detail.busy && <LoadingNote>상세 정보를 확인하고 있어요…</LoadingNote>}
           {detail.failure && <p role="alert">{detail.failure.message} 기존 정보는 유지해요.</p>}
           {detailWait > 0 && <p role="status">{detailWait}초 후 다시 조회할 수 있어요.</p>}
-          <p>{facts.value?.road_address || facts.value?.address || '주소 미확인'}</p>
-          <p>전화: {facts.value?.phone || '미확인'}</p>
+          <FactRows
+            rows={[
+              ['주소', facts.value?.road_address || facts.value?.address || '미확인'],
+              ['전화', facts.value?.phone || '미확인'],
+            ]}
+          />
           {safeUrl && (
             <a className="sn-link" href={safeUrl} target="_blank" rel="noopener noreferrer">
               장소 제공처에서 보기 (새 창)
@@ -131,57 +136,56 @@ export default function ApiPlaceDetail({
           )}
           <InformationMeta information={facts} />
           {detail.data && (
-            <p className="sn-note">
-              상세 확인: {dateLabel(detail.data.checked_at)} · 장소 기본 정보는 저장된 결과
+            <p className="sn-meta">
+              상세 확인 {dateLabel(detail.data.checked_at)} · 장소 기본 정보는 저장된 결과
               기준이에요.
             </p>
           )}
           {parking && (
             <>
               <h3>현재 조회한 등록 주차 정보</h3>
-              <p className="sn-note">
-                조회: {dateLabel(parking.checked_at)} · 빈자리와 외부 이용 가능 여부는 미확인
+              <p className="sn-meta">
+                조회 {dateLabel(parking.checked_at)} · 빈자리와 외부 이용 가능 여부는 미확인
               </p>
               {parking.status !== 'available' ? (
                 <p>등록 주차 정보를 확인하지 못했어요. 주차장이 없다는 뜻은 아니에요.</p>
               ) : (
                 <>
-                  <p>
-                    탐색 반경{' '}
-                    {parking.search_radius_meters === null
-                      ? '미확인'
-                      : `${parking.search_radius_meters}m`}{' '}
-                    ·{' '}
-                    {parking.total_count === null
-                      ? '등록 시설 수 미확인'
-                      : `등록 시설 ${parking.total_count}곳`}
-                  </p>
+                  <FactRows
+                    rows={[
+                      [
+                        '탐색 반경',
+                        parking.search_radius_meters === null
+                          ? '미확인'
+                          : `${parking.search_radius_meters}m`,
+                      ],
+                      [
+                        '등록 시설',
+                        parking.total_count === null ? '미확인' : `${parking.total_count}곳`,
+                      ],
+                    ]}
+                  />
                   {parking.items.length ? (
-                    <details>
+                    <details className="sn-more-rows">
                       <summary>등록 주차장 {parking.items.length}곳 보기</summary>
-                      <ul className="sn-list">
-                        {parking.items.map((item) => (
-                          <li key={item.parking_id} className="sn-section">
-                            <strong>{item.name}</strong> · 직선 약{' '}
-                            {Math.round(item.distance_meters)}m
-                            <details>
-                              <summary>등록 자료 출처</summary>
-                              {item.records.map((record) => (
-                                <div key={record.source_record_id}>
-                                  <p>
-                                    {record.source} · 등록면수{' '}
-                                    {record.registered.value?.registered_capacity === null ||
-                                    record.registered.value?.registered_capacity === undefined
-                                      ? '미확인'
-                                      : `${record.registered.value.registered_capacity}면`}
-                                  </p>
-                                  <InformationMeta information={record.registered} />
-                                </div>
-                              ))}
-                            </details>
-                          </li>
-                        ))}
-                      </ul>
+                      <FactRows
+                        label="등록 주차장"
+                        rows={parking.items.map((item) => {
+                          const capacity = item.records
+                            .map((record) => record.registered.value?.registered_capacity)
+                            .find((value) => value !== null && value !== undefined)
+                          return [
+                            <>
+                              {item.name}
+                              <small className="sn-meta">
+                                {' '}
+                                · {item.records.map((r) => sourceName(r.source)).join(', ')}
+                              </small>
+                            </>,
+                            `직선 ${Math.round(item.distance_meters)}m${capacity !== undefined ? ` · ${capacity}면` : ''}`,
+                          ]
+                        })}
+                      />
                     </details>
                   ) : (
                     <p>이 탐색 범위에서 확인된 등록 주차장이 없어요.</p>
@@ -270,8 +274,7 @@ export default function ApiPlaceDetail({
         <RouteSection
           key={place.id}
           place={place}
-          departure={origin.label}
-          originOverride={{
+          origin={{
             id: 'result-origin',
             name: origin.label,
             lat: origin.coordinates.latitude,

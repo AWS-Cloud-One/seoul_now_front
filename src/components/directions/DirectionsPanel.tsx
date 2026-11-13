@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
-import OriginSearch from './OriginSearch'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchLiveDetail,
   LEVEL_COLORS,
@@ -12,19 +11,21 @@ import { usePages } from '../../api/usePages'
 import type { FoundPlaceData } from '../../api/queries'
 import Icon from '../common/Icon'
 import { NearbyShopsSection, RouteSection, type Target } from '../place/RouteSections'
-import { EmptyState, PanelHeader, SearchField, SecondaryButton, StatusBadge } from '../common/ui'
+import {
+  EmptyState,
+  LoadingNote,
+  PanelHeader,
+  SearchField,
+  SecondaryButton,
+  StatusBadge,
+} from '../common/ui'
 import { focusMap, setMapOverlay } from '../../hooks/useRoute'
 import type { Route } from '../../hooks/useRoute'
+import { useOrigin } from '../../state/origin'
+import { takeDirectionsTarget, type DirectionsTarget } from '../../state/directionsTarget'
+import OriginForm from '../origin/OriginForm'
 
-type Destination = {
-  id: string
-  name: string
-  lat: number
-  lon: number
-  sub: string
-  /** Set when the destination is one of the Seoul real-time city-data places. */
-  liveCode?: string
-}
+type Destination = DirectionsTarget
 
 /** Congestion around the destination, only available for Seoul real-time places. */
 function ArrivalConditions({ code, onOpen }: { code: string; onOpen: () => void }) {
@@ -69,10 +70,34 @@ function ArrivalConditions({ code, onOpen }: { code: string; onOpen: () => void 
 }
 
 export default function DirectionsPanel({ go }: { go: (route: Route) => void }) {
+  const originSection = useRef<HTMLElement>(null)
   const live = useLive()
-  const [origin, setOrigin] = useState<Target | null>(null)
+  // The departure is the shared origin shown above the panel.
+  const shared = useOrigin()
+  const origin: Target | null = useMemo(
+    () =>
+      shared.status === 'ready' && shared.location
+        ? {
+            id: `origin-${shared.location.coordinates.latitude},${shared.location.coordinates.longitude}`,
+            name: shared.location.label,
+            lat: shared.location.coordinates.latitude,
+            lon: shared.location.coordinates.longitude,
+          }
+        : null,
+    [shared.status, shared.location],
+  )
   const [query, setQuery] = useState('')
-  const [dest, setDest] = useState<Destination | null>(null)
+  // Another screen may hand over a destination ("여기까지 길찾기"); route it right away.
+  const [handed] = useState(takeDirectionsTarget)
+  const [dest, setDest] = useState<Destination | null>(handed)
+  useEffect(() => {
+    if (!handed) return
+    setMapOverlay({
+      recommendation: null,
+      destination: { name: handed.name, lat: handed.lat, lng: handed.lon },
+    })
+    focusMap(handed.lat, handed.lon, 15)
+  }, [handed])
   const search = usePages<FoundPlaceData>(
     '/locations/places/search',
     { query: query.trim(), limit: 10 },
@@ -96,7 +121,10 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
   )
   const choose = (next: Destination) => {
     setDest(next)
-    setMapOverlay({ destination: { name: next.name, lat: next.lat, lng: next.lon } })
+    setMapOverlay({
+      recommendation: null,
+      destination: { name: next.name, lat: next.lat, lng: next.lon },
+    })
     focusMap(next.lat, next.lon, 15)
   }
   const searching = query.trim().length > 0
@@ -104,10 +132,17 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
     <>
       <PanelHeader
         title="길찾기"
-        subtitle="출발지와 도착지를 정하면 자동차 경로와 도착지 주변 상황을 보여줘요."
+        subtitle="출발지와 도착지를 정하면 자동차 경로를 확인할 수 있어요"
       />
       <div className="sn-scroll">
-        <OriginSearch value={origin} onChange={setOrigin} />
+        <section
+          ref={originSection}
+          className="sn-section sn-directions-origin"
+          aria-labelledby="sn-dir-origin"
+        >
+          <h3 id="sn-dir-origin">출발지</h3>
+          <OriginForm />
+        </section>
         <section className="sn-section" aria-labelledby="sn-dir-dest">
           <h3 id="sn-dir-dest">도착지</h3>
           {dest ? (
@@ -196,7 +231,7 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
                     ))}
                 </ul>
               )}
-              {found.status === 'loading' && <p className="sn-note">장소를 찾는 중이에요…</p>}
+              {found.status === 'loading' && <LoadingNote>장소를 찾는 중이에요…</LoadingNote>}
               {search.error && (
                 <p role="alert" className="sn-note">
                   {search.error}
@@ -234,8 +269,12 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
             <RouteSection
               key={`route-${dest.id}-${origin?.id || ''}`}
               place={{ id: dest.id, name: dest.name, lat: dest.lat, lon: dest.lon }}
-              departure={null}
-              originOverride={origin}
+              origin={origin}
+              onChangeOrigin={() => {
+                originSection.current?.scrollIntoView({ block: 'start' })
+                originSection.current?.querySelector('input')?.focus()
+              }}
+              autoLoad={dest.id === handed?.id}
             />
             {dest.liveCode && (
               <ArrivalConditions
@@ -259,7 +298,7 @@ export default function DirectionsPanel({ go }: { go: (route: Route) => void }) 
             </SecondaryButton>
           </>
         )}
-        {!dest && <p className="sn-note">출발지와 도착지를 검색해 선택해 주세요.</p>}
+        {!dest && <p className="sn-note">도착지를 검색해 선택해 주세요.</p>}
       </div>
     </>
   )

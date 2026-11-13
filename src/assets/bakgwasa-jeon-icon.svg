@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img" aria-labelledby="title">
+  <title id="title">밖과사전 아이콘</title>
+  <rect width="1254" height="1254" fill="#162C46"/>
+  <path fill="#58E1B9" fill-rule="evenodd" d="M626 168C513 168 422 259 422 373c0 76 36 123 78 179l108 142a22 22 0 0 0 36 0l108-142c42-56 78-103 78-179 0-114-91-205-204-205zm0 116a93.5 93.5 0 1 1 0 187 93.5 93.5 0 0 1 0-187z"/>
+  <path fill="none" stroke="#FFFFFF" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" d="M626 797C525 670 368 602 221 623v366c145-35 300-1 405 87 105-88 260-122 405-87V623c-147-21-304 47-405 174zm0 0v279"/>
+</svg>

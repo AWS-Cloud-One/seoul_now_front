@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 
 export type Route = 'home' | 'recommend' | 'chat' | 'directions' | 'parking' | 'saved'
 const ROUTES: Route[] = ['home', 'recommend', 'chat', 'directions', 'parking', 'saved']
@@ -24,8 +24,17 @@ export function useRoute() {
 
 export const MAP_FOCUS_EVENT = 'sn:map-focus'
 export const PARKING_SELECT_EVENT = 'sn:parking-select'
+let pendingFocus: { lat: number; lng: number; zoom: number } | null = null
 export function focusMap(lat: number, lng: number, zoom = 16) {
+  // Kept for a map that is still loading (it is lazy), which applies it once created.
+  pendingFocus = { lat, lng, zoom }
   window.dispatchEvent(new CustomEvent(MAP_FOCUS_EVENT, { detail: { lat, lng, zoom } }))
+}
+/** A focus requested before the map existed; read once by the map on creation. */
+export function takePendingFocus() {
+  const value = pendingFocus
+  pendingFocus = null
+  return value
 }
 
 /** Fit several points (e.g. origin and destination) into the visible map. */
@@ -45,6 +54,16 @@ export function distanceMeters(a: [number, number], b: [number, number]) {
 export const FOOD_SELECT_EVENT = 'sn:food-select'
 export const MAP_OVERLAY_EVENT = 'sn:map-overlay'
 export type MapOverlay = {
+  lookup?: { id: string; name: string; lat: number; lng: number; kind: 'place' | 'parking' } | null
+  recommendation?: {
+    id: string
+    name: string
+    rank: number | null
+    lat: number
+    lng: number
+    /** In-memory action for the exact result displayed by this marker. */
+    onOpenDetail?: () => void
+  } | null
   parkingBase?: { name: string; lat: number; lng: number } | null
   origin?: { name: string; lat: number; lon: number } | null
   routeSegments?: import('../lib/map/routeTraffic').RouteSegment[] | null
@@ -56,6 +75,13 @@ export type MapOverlay = {
 }
 let overlay: MapOverlay = { route: null, food: null, traffic: null }
 export const getMapOverlay = () => overlay
+const subscribeMap = (listener: () => void) => {
+  window.addEventListener(MAP_OVERLAY_EVENT, listener)
+  return () => window.removeEventListener(MAP_OVERLAY_EVENT, listener)
+}
+export const useMapRecommendation = () =>
+  useSyncExternalStore(subscribeMap, () => overlay.recommendation ?? null)
+export const useMapOverlay = () => useSyncExternalStore(subscribeMap, getMapOverlay)
 /** Detail-panel sections publish what should be drawn on the shared map. */
 export function setMapOverlay(patch: Partial<MapOverlay>) {
   overlay = { ...overlay, ...patch }

@@ -39,7 +39,9 @@
 }
 .sn-kakao-place-pin.sn-kakao-selected-parking {
   border-radius: 50% 50% 50% 8px;
-  box-shadow: 0 0 0 3px #0754d94d, 0 3px 8px #1b5ec64d;
+  box-shadow:
+    0 0 0 3px #0754d94d,
+    0 3px 8px #1b5ec64d;
 }
 .sn-kakao-parking-count {
   position: absolute;
@@ -207,6 +209,10 @@
   box-shadow: 0 4px 18px #19395933;
   max-height: var(--sn-popup-max-height, 360px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.map-record-popup .leaflet-popup-content {
+  overscroll-behavior: contain;
 }
 .sn-kakao-record-close {
   position: absolute;

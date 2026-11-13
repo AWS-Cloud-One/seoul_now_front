@@ -5,7 +5,7 @@ import { conditionsEqual } from '../../lib/domain.js'
 import { useSelectedParking } from '../../hooks/useSelectedParking'
 import { conditionText, dateLabel, placeById } from '../../lib/domain.js'
 import { DEPARTURES } from '../../lib/departures'
-import { PanelTabs } from '../chat/ChatPanel'
+import { PanelTabs } from '../common/PanelTabs'
 import { fitMap, focusMap } from '../../hooks/useRoute'
 import { useAppState } from '../../state/useAppState'
 import type { Entry, Place } from '../../types/trip'
@@ -24,8 +24,8 @@ import {
   SecondaryButton,
   StatusBadge,
 } from '../common/ui'
-import { NearbyShopsSection, RouteSection } from '../place/RouteSections'
 import type { Route } from '../../hooks/useRoute'
+import { useOrigin } from '../../state/origin'
 
 const categoryIcon: Record<string, string> = {
   카페: 'coffee',
@@ -159,111 +159,6 @@ function PlaceCard({
   )
 }
 
-function PlaceDetailView({ go }: { go: (route: Route) => void }) {
-  const { active, result, ui, patchUI, exclude, saveCurrentTrip, currentTripSaved } = useAppState()
-  const detail = ui.detail
-  const parking = useSelectedParking(detail?.id)
-  const place = placeById(detail?.id, result)
-  const entry = result?.entries.find((e) => e.id === detail?.id)
-  if (!detail || !place || !entry || !result) return null
-  const number = result.entries.findIndex((e) => e.id === entry.id) + 1
-  return (
-    <div className="sn-detail">
-      <PanelHeader
-        title={place.name}
-        back={{ label: '추천 목록', onClick: () => patchUI({ detail: null }) }}
-        subtitle={
-          <>
-            <span className="sn-rank is-small">{number}</span> {place.category} · {place.address}
-          </>
-        }
-      />
-      <div className="sn-scroll">
-        <div className="sn-action-row">
-          <PrimaryButton onClick={() => go('parking')}>
-            <Icon name="parking" />
-            {parking ? '주차장 변경' : '주변 주차장'}
-          </PrimaryButton>
-          <SecondaryButton disabled={currentTripSaved} onClick={saveCurrentTrip}>
-            <Icon name="bookmark" />
-            {currentTripSaved ? '저장됨' : '저장'}
-          </SecondaryButton>
-        </div>
-        <section className="sn-section" aria-labelledby="sn-d-now">
-          <h3 id="sn-d-now">현재 상황</h3>
-          <dl className="sn-facts sn-current-facts">
-            <div>
-              <dt>
-                <Icon name="car" />
-                자동차 이동
-              </dt>
-              <dd>{entry.eta === null ? '확인 불가' : `약 ${entry.eta}분`}</dd>
-              <small>목적지까지 · 예시 경로 · 도보 제외</small>
-            </div>
-            <div>
-              <dt>
-                <Icon name="walk" />
-                주차 후 도보
-              </dt>
-              <dd>{parking ? `약 ${parking.minutes}분` : '선택 필요'}</dd>
-              <small>
-                {parking
-                  ? `${parking.lot.name} · 직선거리 기반 추정`
-                  : '주변 주차장에서 선택해 주세요'}
-              </small>
-            </div>
-            <div>
-              <dt>
-                <Icon name="people" />
-                혼잡도
-              </dt>
-              <dd>정보 없음</dd>
-              <small>연결된 관측 정보 없음</small>
-            </div>
-          </dl>
-          <p className="sn-current-note">
-            주차장 외부 이용 가능 여부와 빈자리는 확인되지 않았어요.
-          </p>
-        </section>
-        <RouteSection key={place.id} place={place} departure={result.conditions.departure} />
-        <NearbyShopsSection key={`food-${place.id}`} place={place} />
-        <section className="sn-section" aria-labelledby="sn-d-why">
-          <h3 id="sn-d-why">추천 이유</h3>
-          <p>{entry.reason}</p>
-        </section>
-        <details className="sn-section sn-more">
-          <summary>출처와 상세 정보</summary>
-          <dl className="sn-kv">
-            <dt>추천 당시 조건</dt>
-            <dd>{conditionText(result.conditions)}</dd>
-            <dt>출처</dt>
-            <dd>
-              모의 장소 · 모의 경로 응답
-              <br />
-              추천 계산 {dateLabel(entry.queryTime)} 기준 · {entry.sourceStatus}
-              <br />
-              주차 잔여 대수는 실시간이 아니에요
-            </dd>
-            <dt>주차 탐색 범위</dt>
-            <dd>
-              {place.parkingRadius === null
-                ? '조회 반경 미확인'
-                : `직선 반경 ${place.parkingRadius === 1000 ? '1km' : `${place.parkingRadius}m`}`}
-            </dd>
-          </dl>
-          <p className="sn-note">실시간 교통·영업 여부·주차 여유는 확인되지 않은 예시 정보예요.</p>
-          <SecondaryButton
-            disabled={active.excluded.includes(place.id)}
-            onClick={() => exclude(place.id)}
-          >
-            {active.excluded.includes(place.id) ? '다음 탐색에서 제외돼요' : '이번 여행에서 제외'}
-          </SecondaryButton>
-        </details>
-      </div>
-    </div>
-  )
-}
-
 export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
   const {
     active,
@@ -276,15 +171,24 @@ export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
     submitRecommendation,
     updateDraft,
   } = useAppState()
+  const origin = useOrigin()
   const retryWait = useSecondsRemaining(ui.apiFailure?.retryAt)
   useSecondsRemaining(Date.parse(result?.api?.result.context_expires_at || ''))
   const blocked = ui.busy || !!ui.apiFailure?.canResend || retryWait > 0
   if (!active.onboardingComplete) {
     const draft = active.onboardingDraft || active.conditions
-    const invalid = validateRecommendation(draft)
+    const invalid = validateRecommendation(
+      origin.status === 'ready' && origin.location
+        ? { ...draft, origin: origin.location, departure: origin.location.label }
+        : { ...draft, origin: null },
+    )
     return (
       <>
-        <PanelHeader title="AI 추천" subtitle="출발지와 하고 싶은 일을 알려주세요." />
+        <PanelTabs route="recommend" go={go} recommendLabel="조건으로 찾기" />
+        <PanelHeader
+          title="AI 추천"
+          subtitle="조건을 고르거나 AI 대화 탭에서 하고 싶은 일을 말해 주세요."
+        />
         <div className="sn-scroll sn-form">
           <RecommendationFeedback />
           {ui.busy && (
@@ -314,15 +218,13 @@ export default function RecommendPanel({ go }: { go: (route: Route) => void }) {
     ui.detail.resultId === result.id &&
     result.entries.some((entry) => entry.id === ui.detail!.id)
   )
-    return result.api && active.api ? (
+    return (
       <ApiPlaceDetail
-        key={`${active.trip}:${active.api.version}:${result.id}:${ui.detail.id}`}
+        key={`${active.trip}:${active.api?.version ?? 0}:${result.id}:${ui.detail.id}`}
         result={result}
         placeId={ui.detail.id}
         go={go}
       />
-    ) : (
-      <PlaceDetailView go={go} />
     )
   const stale = result && active.retainedResult?.id === result.id && !ui.busy
   const entries = (result?.entries || []).filter((entry) => {

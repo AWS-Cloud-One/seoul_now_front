@@ -1,0 +1,394 @@
+/* Information layout shared by detail panels: rows, compact source lines, loading states. */
+.sn-rows {
+  display: grid;
+  margin: 0;
+  border: 1px solid var(--sn-line);
+  border-radius: 12px;
+  background: var(--sn-surface);
+  overflow: hidden;
+}
+.sn-rows > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+}
+.sn-rows > div + div {
+  border-top: 1px solid var(--sn-line);
+}
+.sn-rows dt {
+  min-width: 0;
+  color: var(--sn-text-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.sn-rows dd {
+  margin: 0;
+  color: var(--sn-text);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.sn-meta {
+  color: var(--sn-text-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.sn-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sn-info-bg);
+  color: var(--sn-info) !important;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sn-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: sn-spin 0.8s linear infinite;
+}
+@keyframes sn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sn-spinner {
+    animation: none;
+    border-right-color: currentColor;
+    opacity: 0.6;
+  }
+}
+/* Map overlay status pills (population layer, map loading) share the loading look. */
+.sn-population-status.sn-loading,
+.sn-map-loading .sn-loading {
+  justify-content: flex-start;
+  width: max-content;
+  max-width: 100%;
+  box-shadow: var(--sn-shadow);
+}
+.sn-more-rows > summary {
+  cursor: pointer;
+  color: var(--sn-brand-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.sn-more-rows[open] > summary {
+  margin-bottom: 8px;
+}
+/* Parking registration details inside a parking card. */
+.sn-parking-detail {
+  display: grid;
+  gap: 8px;
+  margin: 0 12px 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--sn-bg);
+}
+.sn-parking-detail > strong {
+  font-size: 14px;
+}
+.sn-parking-detail details > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sn-parking-detail details[open] > summary {
+  margin-bottom: 8px;
+}
+/* Shared departure: button at the map's top right and its picker popover. */
+.sn-map-origin {
+  position: absolute;
+  z-index: 520;
+  top: 14px;
+  right: 14px;
+}
+.sn-map-top {
+  max-width: calc(100% - 300px);
+}
+.sn-origin-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  min-height: 44px;
+  padding: 6px 14px 6px 12px;
+  border: 1px solid var(--sn-line);
+  border-radius: 12px;
+  background: var(--sn-surface);
+  color: var(--sn-text);
+  box-shadow: var(--sn-shadow);
+  cursor: pointer;
+}
+.sn-origin-button:hover {
+  background: var(--sn-bg);
+}
+.sn-origin-button > .icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--sn-brand);
+}
+.sn-origin-button.is-missing {
+  border-color: #f2c97d;
+  background: var(--sn-warn-bg);
+  color: var(--sn-warn);
+}
+.sn-origin-button.is-missing > .icon {
+  color: var(--sn-warn);
+}
+.sn-origin-button-text {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.sn-origin-button-text small {
+  flex: none;
+  color: var(--sn-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sn-origin-button-text span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sn-origin-button .sn-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.sn-origin-popover {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  display: grid;
+  gap: 10px;
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid var(--sn-line);
+  border-radius: 14px;
+  background: var(--sn-surface);
+  box-shadow: 0 8px 28px rgba(24, 38, 43, 0.18);
+}
+.sn-origin-popover > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sn-origin-popover > header strong {
+  font-size: 15px;
+}
+.sn-origin-form {
+  display: grid;
+  gap: 10px;
+}
+.sn-origin-form .field {
+  display: grid;
+  gap: 8px;
+}
+.sn-origin-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sn-text-2);
+  font-size: 13px;
+}
+.sn-origin-current .icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--sn-brand);
+}
+.sn-origin-current strong {
+  color: var(--sn-text);
+}
+.sn-origin-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--sn-info-bg);
+  color: var(--sn-info);
+  font-size: 11px;
+  font-weight: 600;
+}
+.sn-origin-message {
+  color: var(--sn-warn);
+  font-size: 13px;
+  font-weight: 600;
+}
+/* Departure line inside the recommendation form. */
+.sn-origin-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+}
+.sn-origin-field-label {
+  grid-column: 1 / -1;
+  font-weight: 700;
+}
+.sn-origin-field p {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+.sn-origin-field .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--sn-brand);
+}
+.sn-route-origin {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+@media (max-width: 900px) {
+  .sn-map-origin {
+    top: 10px;
+    right: 10px;
+  }
+  .sn-map-top {
+    max-width: calc(100% - 66px);
+  }
+  /* Same footprint as the other map controls; the label is in the popover. */
+  .sn-origin-button {
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+  }
+  .sn-origin-button-text {
+    display: none;
+  }
+  .sn-map-controls {
+    top: 64px;
+  }
+  .sn-origin-popover {
+    position: fixed;
+    z-index: 1200;
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+  }
+}
+/* 지도 홈: summary cards that also switch the topic below and the map layer. */
+.sn-home-cards {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--sn-line);
+  background: var(--sn-surface);
+}
+.sn-home-card {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--sn-line);
+  border-radius: 12px;
+  background: var(--sn-surface);
+  color: var(--sn-text);
+  text-align: left;
+  cursor: pointer;
+}
+.sn-home-card:hover {
+  background: var(--sn-bg);
+}
+.sn-home-card.is-on {
+  border-color: var(--sn-brand);
+  background: var(--sn-select);
+  box-shadow: inset 0 0 0 1px var(--sn-brand);
+}
+.sn-home-card-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sn-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sn-home-card-label .icon {
+  width: 14px;
+  height: 14px;
+}
+.sn-home-card.is-on .sn-home-card-label {
+  color: var(--sn-brand-ink);
+}
+.sn-home-card strong {
+  overflow: hidden;
+  font-size: 15px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sn-home-card small {
+  overflow: hidden;
+  color: var(--sn-text-2);
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sn-home-topic-sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sn-text-2);
+  font-size: 13px;
+}
+.sn-home-topic-sub .icon {
+  width: 14px;
+  height: 14px;
+}
+.sn-road-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 1px solid var(--sn-line);
+  border-radius: 14px;
+  background: var(--sn-surface);
+  color: var(--sn-text);
+  text-align: left;
+  cursor: pointer;
+}
+.sn-road-row .sn-place-body {
+  flex: 1;
+  min-width: 0;
+}
+.sn-road-row:hover {
+  background: var(--sn-select);
+}
+@media (max-width: 900px) {
+  .sn-home-cards {
+    gap: 6px;
+    padding: 10px 16px;
+  }
+  .sn-home-card {
+    padding: 8px;
+  }
+  .sn-home-card strong {
+    font-size: 14px;
+  }
+}

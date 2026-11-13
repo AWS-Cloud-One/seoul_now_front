@@ -1,10 +1,6 @@
 
 /* Keep Leaflet's panes inside the map and away from chat, menus and dialogs. */
-.real-map-stage{isolation:isolate}
-.map-panel .map-tools-body{max-height:min(360px,var(--map-menu-height,260px));overflow-y:auto;overscroll-behavior:contain}
 .real-map{position:absolute;inset:0;z-index:0;background:#e9ece4;font-family: var(--app-font)}
-.real-map-stage .map-controls{z-index:2}
-.real-map-label{position:absolute;top:13px;left:13px;z-index:2;font-size:10px;font-weight:550;color:#465849;background:#fffffff0;padding:6px 9px;border:1px solid #d7dfd0;border-radius:7px;box-shadow:0 2px 8px #1c342011;pointer-events:none}
 .real-map .leaflet-control-attribution{font-family: var(--app-font);font-size:10px;line-height:1.6;background:#fffffff0;padding:2px 6px}
 .real-map .leaflet-control-attribution a{color:#345e4b;text-decoration:underline;text-underline-offset:2px}
 .destination-marker{display:grid;place-items:center;color:#fff;background:#53735c;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 10px #1f42364d;font-weight:750;font-size:14px}
@@ -14,11 +10,8 @@
 .real-map .destination-label{padding:4px 8px;background:#fffffff2;border:1px solid #dce3d6;border-radius:6px;box-shadow:0 2px 6px #16342314;color:#405647;font-size:11px;font-weight:600;white-space:nowrap}
 .real-map .destination-label.selected{color:#193e30;border-color:#88a08b}
 .real-map .leaflet-tooltip-bottom.destination-label::before{border-bottom-color:#fff}
-.observation-marker{display:grid;place-items:center;border-radius:9px;color:#fff;background:#658095;border:2px solid #fff;font-size:12px;font-weight:700;box-shadow:0 1px 5px #20352f30}
-
-.real-map .observation-label{font-family: var(--app-font);font-size:10px;color:#516344;background:#ffffffe8;box-shadow:none;border-color:#b4c4a8}
 .map-load-status{position:absolute;bottom:31px;left:12px;right:12px;z-index:2;padding:10px 12px;border:1px solid #d9dfd4;background:#fffffff5;box-shadow:0 2px 10px #193d3014;border-radius:9px;font-size:11px;line-height:1.65;color:#50604d;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .map-load-status[hidden]{display:none}
 .map-load-status button{min-height:32px;padding:5px 9px;font-size:11px;white-space:nowrap;flex-shrink:0}
-@media(max-width:600px){.real-map-label{top:10px;left:10px;font-size:9px;padding:5px 7px;max-width:calc(100% - 68px)}.real-map .leaflet-control-attribution{font-size:9px}.real-map .destination-label{font-size:10px;padding:3px 6px}}
+@media(max-width:600px){.real-map .leaflet-control-attribution{font-size:9px}.real-map .destination-label{font-size:10px;padding:3px 6px}}
 

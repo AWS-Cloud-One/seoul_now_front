@@ -8,7 +8,12 @@ export default defineConfig(({ mode }) => {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('FRONTEND_PORT는 1~65535 사이의 정수여야 합니다.')
   }
+  // Order matters: the separate local V2 chat app must match before the general /api proxy.
   const proxy = {
+    '/api/v2/chat': {
+      target: env.CHAT_PROXY_TARGET || 'http://127.0.0.1:8001',
+      changeOrigin: true,
+    },
     '/api': {
       target: env.API_PROXY_TARGET || 'http://127.0.0.1:8000',
       changeOrigin: true,

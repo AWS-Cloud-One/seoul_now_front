@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 const icons: Record<string, ReactNode> = {
+  stop: <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />,
   fit: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
   layers: (
     <>

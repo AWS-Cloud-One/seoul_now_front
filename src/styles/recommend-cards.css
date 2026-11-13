@@ -54,10 +54,6 @@
   gap: 6px 10px;
   margin-top: 0;
 }
-.sn-place-total {
-  color: var(--sn-text-2);
-  font-size: 12px;
-}
 .sn-place-card .sn-place-tags {
   gap: 12px;
 }
@@ -157,62 +153,6 @@
 }
 
 /* Current conditions read as rows, so narrow panels never squeeze labels into tall columns. */
-.sn-current-facts {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-  border: 1px solid var(--sn-line);
-  border-radius: 14px;
-  overflow: hidden;
-}
-.sn-current-facts > div {
-  display: grid;
-  grid-template-columns: 104px minmax(0, 1fr);
-  gap: 4px 12px;
-  padding: 14px;
-  border: 0;
-  border-radius: 0;
-  background: var(--sn-surface);
-  align-items: baseline;
-}
-.sn-current-facts > div + div {
-  border-top: 1px solid var(--sn-line);
-}
-.sn-current-facts dt {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  grid-column: 1;
-  grid-row: 1 / span 2;
-  font-size: 13px;
-  white-space: nowrap;
-}
-.sn-current-facts dt .icon {
-  width: 17px;
-  height: 17px;
-  flex: none;
-  color: var(--sn-brand-ink);
-}
-.sn-current-facts dd {
-  grid-column: 2;
-  font-size: 16px;
-  line-height: 1.4;
-  word-break: keep-all;
-}
-.sn-current-facts small {
-  grid-column: 2;
-  display: block;
-  font-size: 12px;
-  line-height: 1.6;
-  word-break: keep-all;
-  overflow-wrap: anywhere;
-}
-.sn-current-note {
-  margin-top: 10px !important;
-  color: var(--sn-text-2);
-  font-size: 12px;
-  line-height: 1.7;
-  word-break: keep-all;
-}
 
 /* One outer border surrounds the parking information and its confirmation action. */
 .sn-parking-item {

@@ -4,9 +4,10 @@ import AppStateProvider from './state/AppStateProvider'
 import Dialog from './components/workspace/Dialog'
 import AppShell from './pages/AppShell'
 import { StartScreen } from './pages/StartScreen'
+import Icon from './components/common/Icon'
 
 function Application() {
-  const { ui } = useAppState()
+  const { ui, dismissToast } = useAppState()
   const start = ui.page === 'start'
   useLayoutEffect(() => {
     document.documentElement.classList.toggle('app-entered', !start)
@@ -27,8 +28,25 @@ function Application() {
           저장소를 사용할 수 없어 이 탭에서만 기록돼요.
         </div>
       )}
-      <div className="sn-toast" role="status" aria-live="polite" hidden={!ui.toast}>
-        {ui.toast}
+      <div className="sn-toast" hidden={!ui.toast}>
+        <span role="status" aria-live="polite">
+          {ui.toast}
+        </span>
+        {ui.toastAction && (
+          <button
+            type="button"
+            onClick={() => {
+              const action = ui.toastAction
+              dismissToast()
+              action?.onClick()
+            }}
+          >
+            {ui.toastAction.label}
+          </button>
+        )}
+        <button type="button" aria-label="알림 닫기" onClick={dismissToast}>
+          <Icon name="close" />
+        </button>
       </div>
     </>
   )

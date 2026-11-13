@@ -1,10 +1,10 @@
 import { mockScreenApi, screenConditions } from '../api/screenTestApi'
 import { apiConditions, contextResult } from '../api/testFixtures'
 import { createServerTrip, displayConditions, resultSnapshot } from './apiState'
-import { act, cleanup, render, renderHook, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, renderHook, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import App from '../App'
+import { ArchivedRecommendations } from '../chat/components/ArchivedRecommendations'
 import AppStateProvider from './AppStateProvider'
 import { newState, placeById } from '../lib/domain.js'
 import { loadSavedTrips, SAVED_TRIPS_KEY } from './savedTrips'
@@ -45,7 +45,7 @@ async function recommend(hook: ReturnType<typeof controller>, more = 0) {
     })
 }
 
-it('저장한 추천을 중복하지 않고, 기록 만료·여행 삭제·새 세션 후에도 재요청 없이 그대로 복원한다', async () => {
+it('저장한 추천을 중복하지 않고, 기록 만료·새 여행·새 세션 후에도 재요청 없이 그대로 복원한다', async () => {
   const fetcher = mockScreenApi()
   const first = controller()
   await recommend(first)
@@ -61,7 +61,7 @@ it('저장한 추천을 중복하지 않고, 기록 만료·여행 삭제·새 �
       await first.result.current.recommendMore()
     })
   expect(first.result.current.active.groups.some((group) => group.id === original.id)).toBe(false)
-  act(() => first.result.current.deleteTrip(first.result.current.active.trip))
+  act(() => first.result.current.newTrip())
   expect(first.result.current.savedTrips).toHaveLength(1)
   first.unmount()
   sessionStorage.clear()
@@ -164,44 +164,22 @@ it('장소 정보가 없는 예전 로컬 모의 저장본은 목록에서 제�
   expect(loadSavedTrips().map((saved) => saved.id)).toEqual([server.id])
 })
 
-it('저장 탭 빈 목록 → 추천 저장 → 새 여행 → 저장 목록에서 복원한다', async () => {
-  window.location.hash = ''
+it('이전 저장본을 읽기 전용으로 열고 길찾기에는 장소만 전달한다', async () => {
   const user = userEvent.setup()
-  render(<App />)
-  await user.click(screen.getByRole('button', { name: /시작하기/ }))
-  await user.click(
-    within(screen.getByRole('navigation', { name: '주요 메뉴' })).getByRole('button', {
-      name: /저장/,
-    }),
-  )
-  expect(await screen.findByText('저장한 여행이 없어요')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: /현재 추천 저장/ })).toBeDisabled()
-  await user.click(screen.getByRole('button', { name: 'AI 추천' }))
+  const first = controller()
   mockScreenApi()
-  await user.type(screen.getByRole('searchbox', { name: /어디에서 출발하세요/ }), '서울역')
-  await user.click(await screen.findByRole('button', { name: /서울역.*서울 중구/ }))
-  await user.click(screen.getByRole('checkbox', { name: '카페' }))
-  await user.click(screen.getByRole('button', { name: /이 조건으로 찾아보기/ }))
-  await waitFor(() => expect(screen.getAllByRole('button', { name: /선택$/ })).toHaveLength(3))
-  const storedResult = JSON.parse(sessionStorage.getItem('seoul-next-stop-trips-v2')!).trips[0]
-    .groups[0]
-  const firstName = placeById(storedResult.entries[0].id, storedResult)!.name
-  await user.click(
-    within(screen.getByRole('navigation', { name: '주요 메뉴' })).getByRole('button', {
-      name: /저장/,
-    }),
-  )
-  await user.click(screen.getByRole('button', { name: '현재 추천 저장' }))
-  expect(screen.getByRole('button', { name: '저장됨' })).toBeDisabled()
-  await user.click(screen.getByRole('button', { name: 'AI 추천' }))
-  await user.click(screen.getByRole('button', { name: '새 여행' }))
-  await user.click(
-    within(screen.getByRole('navigation', { name: '주요 메뉴' })).getByRole('button', {
-      name: /저장/,
-    }),
-  )
-  await user.click(screen.getByRole('button', { name: /열기$/ }))
-  expect(
-    await screen.findByRole('button', { name: new RegExp(firstName + ' 선택') }),
-  ).toBeInTheDocument()
-}, 15000)
+  await recommend(first)
+  act(() => first.result.current.saveCurrentTrip())
+  const saved = first.result.current.savedTrips[0]
+  const place = placeById(saved.result.entries[0].id, saved.result)!
+  first.unmount()
+  const go = vi.fn()
+  render(<ArchivedRecommendations go={go} />, { wrapper: AppStateProvider })
+  await user.click(screen.getByText('이전 추천 묶음 1개'))
+  await user.click(screen.getByText(saved.title))
+  expect(screen.getByText(`1. ${place.name}`)).toBeInTheDocument()
+  expect(screen.queryByRole('textbox', { name: 'AI에게 보낼 메시지' })).not.toBeInTheDocument()
+  await user.click(screen.getAllByRole('button', { name: '여기로 길찾기' })[0])
+  expect(go).toHaveBeenCalledWith('directions')
+  expect(loadSavedTrips()).toHaveLength(1)
+})

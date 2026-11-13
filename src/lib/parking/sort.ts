@@ -16,14 +16,3 @@ export function hourlyBaseRate(
     return null
   return (rate.amount * 60) / rate.minutes
 }
-type Row = { lot: ParkingLot; meters: number }
-export function compareParkingRows(a: Row, b: Row, sort: ParkingSort): number {
-  if (sort === 'price') {
-    const left = hourlyBaseRate(a.lot),
-      right = hourlyBaseRate(b.lot)
-    if (left === null && right !== null) return 1
-    if (left !== null && right === null) return -1
-    if (left !== null && right !== null && left !== right) return left - right
-  }
-  return a.meters - b.meters
-}

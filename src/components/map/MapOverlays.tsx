@@ -1,5 +1,6 @@
 import { useSelectedParking } from '../../hooks/useSelectedParking'
 import { useState } from 'react'
+import { useMapOverlay } from '../../hooks/useRoute'
 import { dateLabel, placeById } from '../../lib/domain.js'
 import { DEPARTURES } from '../../lib/departures'
 import { useAppState } from '../../state/useAppState'
@@ -9,7 +10,7 @@ import { fitMap } from '../../hooks/useRoute'
 import { useLive } from '../../state/live/store'
 import { POPULATION_HEAT_COLORS } from '../../lib/map/populationHeat'
 import { ROAD_SPEED_COLORS } from '../../lib/map/roadStyle'
-import { IconButton, PrimaryButton, SecondaryButton, StatusBadge } from '../common/ui'
+import { IconButton, LoadingNote, PrimaryButton, SecondaryButton, StatusBadge } from '../common/ui'
 
 const layerOptions = [
   ['parking', '주차장', 'parking'],
@@ -51,9 +52,7 @@ export function LayerMenu() {
         </p>
       )}
       {layers.population && live.status === 'loading' && !live.places.length && (
-        <p className="sn-population-status" role="status">
-          유동인구를 불러오는 중이에요…
-        </p>
+        <LoadingNote className="sn-population-status">유동인구를 불러오는 중이에요…</LoadingNote>
       )}
     </div>
   )
@@ -62,13 +61,23 @@ export function LayerMenu() {
 function useLegend() {
   const { layers } = useAppState()
   // Parking has no colour scale to explain, so it does not appear in the legend.
-  return { layers, any: layers.population || layers.roads }
+  return { layers, any: layers.population || layers.roads || layers.parking }
 }
 
 function LegendGroups() {
   const { layers } = useLegend()
+  const overlay = useMapOverlay()
+  const parkingTarget = overlay.recommendation ?? overlay.destination
   return (
     <>
+      {layers.parking && (
+        <section className="sn-lg" aria-label="주차장 표시 안내">
+          <h4>등록 주차장</h4>
+          <p className="sn-note">
+            {parkingTarget ? `${parkingTarget.name} 주변 500m · ` : ''}숫자는 등록 주차장 수예요.
+          </p>
+        </section>
+      )}
       {layers.population && (
         <section className="sn-lg" aria-label="관측 인구 혼잡">
           <h4>관측 인구 혼잡</h4>
