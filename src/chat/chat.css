@@ -536,6 +536,9 @@
   height: 16px;
 }
 .sn-chat-summary {
+  position: relative;
+  width: 100%;
+  min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 12px;
@@ -546,9 +549,6 @@
 .sn-chat-summary summary {
   min-height: 44px;
 }
-.sn-chat-management {
-  position: relative;
-}
 .sn-chat-management > summary {
   color: var(--sn-text-2);
   white-space: nowrap;
@@ -558,7 +558,7 @@
   right: 0;
   top: 44px;
   z-index: 30;
-  width: min(280px, calc(100vw - 40px));
+  width: min(280px, 100%);
   padding: 16px;
   border: 1px solid var(--sn-line);
   border-radius: 12px;
