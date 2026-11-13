@@ -3,7 +3,9 @@ import { conditionChanges, EMPTY_CONDITIONS, PURPOSES } from '../../lib/domain.j
 import { useAppState } from '../../state/useAppState'
 import type { Conditions } from '../../types/trip'
 import Icon from '../common/Icon'
-import RecommendationOrigin from './RecommendationOrigin'
+import OriginForm from '../origin/OriginForm'
+import { openOriginPicker, useOrigin } from '../../state/origin'
+import { SecondaryButton } from '../common/ui'
 import { useSecondsRemaining } from '../../hooks/useSecondsRemaining'
 import { purposeCodes, validateRecommendation } from '../../lib/recommendationConditions'
 
@@ -27,11 +29,17 @@ export default function ConditionsForm({
   const retryWait = useSecondsRemaining(ui.apiFailure?.retryAt)
   const blocked = ui.busy || !!ui.apiFailure?.canResend || retryWait > 0
   const onboarding = mode === 'onboarding'
+  // The departure is the shared origin (상단 출발지), not a per-form field.
+  const origin = useOrigin()
+  const withOrigin = (value: Conditions): Conditions =>
+    origin.status === 'ready' && origin.location
+      ? { ...value, origin: origin.location, departure: origin.location.label }
+      : { ...value, origin: null, departure: null }
   function update(patch: Partial<Conditions>) {
     const next = { ...draft, ...patch }
     setDraft(next)
     setError('')
-    onChange?.(next)
+    onChange?.(withOrigin(next))
   }
   function toggle(field: 'purposes' | 'ages', value: string) {
     if (field === 'purposes' && draft.purposes.length === 2 && !draft.purposes.includes(value)) {
@@ -65,7 +73,8 @@ export default function ConditionsForm({
       />
     </div>
   ))
-  const invalid = validateRecommendation(draft)
+  const effective = withOrigin(draft)
+  const invalid = validateRecommendation(effective)
   return (
     <>
       <form
@@ -79,15 +88,30 @@ export default function ConditionsForm({
             setError(invalid)
             return
           }
-          onSubmit(structuredClone(draft))
+          onSubmit(structuredClone(effective))
         }}
       >
         <fieldset className="stack" disabled={ui.busy}>
-          <RecommendationOrigin
-            value={draft.origin?.label === draft.departure ? draft.origin : null}
-            disabled={ui.busy}
-            onChange={(origin) => update({ origin, departure: origin?.label || null })}
-          />
+          {/* The departure is set on the map (top right); the edit dialog covers the map. */}
+          {onboarding ? (
+            <div className="field sn-origin-field">
+              <span className="sn-origin-field-label">출발지</span>
+              {effective.origin ? (
+                <p>
+                  <Icon name="pin" /> <strong>{effective.origin.label}</strong>
+                </p>
+              ) : (
+                <p className="form-error" role="status">
+                  출발지를 정해야 추천할 수 있어요.
+                </p>
+              )}
+              <SecondaryButton className="is-compact" onClick={() => openOriginPicker()}>
+                {effective.origin ? '출발지 변경' : '출발지 정하기'}
+              </SecondaryButton>
+            </div>
+          ) : (
+            <OriginForm />
+          )}
           <fieldset className="field">
             <legend>
               오늘은 무엇을 하고 싶나요?{' '}
@@ -214,7 +238,7 @@ export default function ConditionsForm({
               {mode === 'edit' && (
                 <>
                   <strong>변경 전 → 적용할 조건</strong>
-                  {conditionChanges(active.conditions, draft).map((change) => (
+                  {conditionChanges(active.conditions, effective).map((change) => (
                     <p key={change}>{change}</p>
                   ))}
                 </>

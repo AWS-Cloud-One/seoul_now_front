@@ -1,6 +1,6 @@
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import App from '../App'
+import RecommendPanel from '../components/recommendation/RecommendPanel'
 import AppStateProvider from './AppStateProvider'
 import { useAppState } from './useAppState'
 import { newState, placeById } from '../lib/domain.js'
@@ -73,7 +73,7 @@ it('API 장소·조건·정보 상태·토큰을 보존하고 실제 카드 이�
   expect(loadSavedTrips()).toHaveLength(1)
   restored.unmount()
   window.location.hash = '/recommend'
-  render(<App />)
+  render(<RecommendPanel go={vi.fn()} />, { wrapper: AppStateProvider })
   expect(screen.getByRole('button', { name: /1번 API에서 받은 장소 선택/ })).toBeTruthy()
   expect(fetcher.mock.calls.filter(([url]) => url === '/api/v1/recommendations')).toHaveLength(1)
 })

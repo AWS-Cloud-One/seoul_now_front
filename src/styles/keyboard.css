@@ -120,8 +120,7 @@
     visibility: hidden;
     pointer-events: none;
   }
-  .sn-app[data-chat-map='true'] .sn-sheet-handle,
-  .sn-app[data-chat-map='true'] .sn-sheet-peek {
+  .sn-app[data-chat-map='true'] .sn-sheet-handle {
     display: none;
   }
   .sn-chat-return {

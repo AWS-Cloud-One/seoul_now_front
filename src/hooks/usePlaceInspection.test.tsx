@@ -296,7 +296,7 @@ it('상세 화면은 실제 출처·현재 조회와 당시 근거를 나누고 
     </AppStateProvider>,
   )
   fireEvent.click(screen.getByText('상세 열기'))
-  await screen.findByText(/상세 확인:/)
+  await screen.findByText(/상세 확인 /)
   expect(screen.queryByText(/모의 장소|예시 경로/)).not.toBeInTheDocument()
   expect(screen.getByText('아직 현재 이동시간을 조회하지 않았어요.')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '주변 현재 인구 현황 알려줘' }))

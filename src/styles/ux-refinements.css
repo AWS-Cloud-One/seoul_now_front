@@ -1,0 +1,194 @@
+/* Map-first refinement following unslop by Damir Sokolovsky (@heydamir), CC BY 4.0.
+   Keep the product's blue; let selected places, not surrounding controls, carry it. */
+.sn-app {
+  --sn-bg: #f6f7f8;
+  --sn-line: #dce1e7;
+  --sn-text-2: #536173;
+  --sn-brand: #1d62d2;
+  --sn-brand-hover: #174fab;
+  font-variant-numeric: tabular-nums;
+}
+.sn-app h2,
+.sn-app h3,
+.sn-app strong {
+  font-weight: 600;
+}
+.sn-app button,
+.sn-app input,
+.sn-app select,
+.sn-app small {
+  letter-spacing: 0;
+}
+.sn-layer-toggle {
+  border-radius: 10px;
+  gap: 8px;
+  font-weight: 500;
+  box-shadow: 0 1px 3px #1b2a3a14;
+}
+.sn-layer-toggle[aria-pressed='true'],
+.sn-layer-toggle.is-population[aria-pressed='true'],
+.sn-layer-toggle.is-roads[aria-pressed='true'] {
+  color: var(--sn-brand-ink);
+  border-color: #adc5e8;
+  background: #f1f5fa;
+}
+.sn-home-card small {
+  white-space: normal;
+  line-height: 1.4;
+}
+.sn-home-topic-sub {
+  padding: 12px 20px;
+}
+.sn-kakao-parking {
+  background: #fff;
+  color: #385b7d;
+  border-color: #b8c8d8;
+  font-weight: 500;
+  box-shadow: 0 1px 3px #1b2a3a14;
+}
+.sn-kakao-parking svg {
+  width: 16px;
+  height: 16px;
+}
+.sn-kakao-parking b {
+  font-weight: 500;
+}
+.sn-kakao-place-pin {
+  box-shadow: 0 2px 6px #1b2a3a26;
+}
+.sn-recommendation-pin .sn-kakao-pin-label {
+  display: block;
+  opacity: 1;
+  visibility: visible;
+  background: var(--sn-brand-ink);
+  color: #fff;
+  border-color: var(--sn-brand-ink);
+  font-size: 14px;
+  padding: 8px 12px;
+}
+.sn-recommendation-leaflet > span {
+  display: block;
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 12px;
+  border: 2px solid #fff;
+  border-radius: 10px;
+  background: var(--sn-brand-ink);
+  color: #fff;
+  transform: translateX(-40%);
+  font: 500 14px var(--app-font);
+}
+.sn-legend-bar {
+  flex-wrap: wrap;
+  max-width: calc(100% - 80px);
+}
+.sn-legend-bar .sn-note {
+  max-width: 220px;
+  font-size: 12px;
+}
+.sn-directions-origin .sn-origin-form {
+  gap: 12px;
+}
+.sn-saved-card {
+  padding-bottom: 12px;
+}
+.sn-saved-card > .sn-link {
+  margin-left: 16px;
+  min-height: 44px;
+}
+@media (max-width: 900px) {
+  .sn-app[data-route='chat'][data-sheet]:not([data-chat-map='true']) {
+    --sn-rest-sheet-height: calc(
+      var(--sn-layout-height, 100dvh) - 64px - env(safe-area-inset-bottom)
+    );
+  }
+  .sn-app[data-route='chat']:not([data-chat-map='true']) .sn-panel {
+    border-radius: 0;
+  }
+  .sn-app[data-route='chat']:not([data-chat-map='true']) .sn-sheet-handle {
+    display: none;
+  }
+  .sn-app[data-route='chat']:not([data-chat-map='true']) .sn-panel-inner {
+    padding-top: 0;
+  }
+  .sn-app[data-result-map='true'] .sn-panel-inner {
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .sn-app[data-result-map='true'] .sn-sheet-handle {
+    display: none;
+  }
+  .sn-app[data-route='recommend']:not([data-sheet='peek']) {
+    --sn-rest-sheet-height: calc(
+      var(--sn-layout-height, 100dvh) - 120px - env(safe-area-inset-bottom)
+    );
+  }
+  .sn-chat-map-button,
+  .sn-app .sn-chip,
+  .sn-app .sn-link,
+  .sn-app .sn-btn {
+    min-height: 44px;
+  }
+  .sn-layer-toggle {
+    min-height: 44px;
+  }
+  .sn-app .sn-place-meta,
+  .sn-app .sn-note {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .sn-home-cards {
+    padding: 12px 16px;
+    gap: 8px;
+  }
+  .sn-home-topic-sub {
+    padding: 8px 16px;
+  }
+}
+
+/* Short notifications stay out of the information list. */
+.sn-toast {
+  display: flex;
+  width: min(520px, calc(100% - 24px));
+  box-sizing: border-box;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 16px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  border-radius: 12px;
+}
+.sn-toast > span {
+  flex: 1;
+  min-width: 0;
+}
+.sn-toast button {
+  flex-shrink: 0;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.sn-toast button:not([aria-label]) {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.sn-toast button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+.sn-archive {
+  max-height: 40%;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.sn-archive .sn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -14,36 +14,7 @@ import type { Route } from '../../hooks/useRoute'
 import { recommendationQuestion } from '../../lib/recommendationQuestion'
 import ResponsePending from '../common/ResponsePending'
 
-/** Switch between the recommendation list and the AI conversation without leaving the panel. */
-export function PanelTabs({
-  route,
-  go,
-}: {
-  route: 'recommend' | 'chat'
-  go: (route: Route) => void
-}) {
-  return (
-    <div className="sn-tabs" role="tablist" aria-label="추천 패널 보기">
-      {(
-        [
-          ['recommend', '추천 목록'],
-          ['chat', 'AI 대화'],
-        ] as const
-      ).map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          role="tab"
-          aria-selected={route === key}
-          className={route === key ? 'is-on' : ''}
-          onClick={() => go(key)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  )
-}
+import { PanelTabs } from '../common/PanelTabs'
 
 export default function ChatPanel({
   go,

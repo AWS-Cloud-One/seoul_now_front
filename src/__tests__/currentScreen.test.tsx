@@ -42,11 +42,14 @@ it('현재 시작 화면에서 시작하기를 누르면 지도와 주요 메뉴
   expect(screen.queryByRole('button', { name: '시작하기' })).not.toBeInTheDocument()
   expect(await screen.findByText('테스트 지도')).toBeInTheDocument()
   const navigation = within(screen.getByRole('navigation', { name: '주요 메뉴' }))
-  for (const name of ['지도 홈', 'AI 추천', 'AI 대화', '길찾기', '주차장', '저장']) {
+  for (const name of ['지도 홈', 'AI 추천', '길찾기', '저장']) {
     expect(navigation.getByRole('button', { name })).toBeInTheDocument()
   }
+  // AI 대화 is a view inside AI 추천 and parking opens from home or a place.
+  for (const name of ['AI 대화', '주차장'])
+    expect(navigation.queryByRole('button', { name })).not.toBeInTheDocument()
   await user.click(navigation.getByRole('button', { name: '저장' }))
-  expect(await screen.findByText('저장한 여행이 없어요')).toBeInTheDocument()
+  expect(await screen.findByText('저장한 추천 묶음이 없어요')).toBeInTheDocument()
   expect(screen.getByRole('main', { name: '지도' })).toBeInTheDocument()
 })
 

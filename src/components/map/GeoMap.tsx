@@ -12,6 +12,7 @@ import { useRoadTraffic } from '../../hooks/useRoadTraffic'
 import { SEOUL_QUERY, type MapQuery } from '../../api/queries'
 import { useParkingData } from '../../hooks/useParkingData'
 import { resolveParkingPopup } from '../../lib/parking/popup'
+import { isolatePopupScroll } from '../../lib/map/popupScroll'
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import L from '../../vendor/leaflet.js'
@@ -23,7 +24,14 @@ import { DEPARTURES } from '../../lib/departures'
 import { useAppState } from '../../state/useAppState'
 import MapRecord from './MapRecord'
 import Icon from '../common/Icon'
-import { PARKING_SELECT_EVENT, getMapOverlay, type MapOverlay } from '../../hooks/useRoute'
+import {
+  takePendingFocus,
+  PARKING_SELECT_EVENT,
+  getMapOverlay,
+  useMapOverlay,
+  distanceMeters,
+  type MapOverlay,
+} from '../../hooks/useRoute'
 import { createLiveLayers } from '../../lib/map/liveLayers'
 import { livePopulationRecord } from '../../lib/map/populationLabels'
 import { startLive, useLive } from '../../state/live/store'
@@ -62,12 +70,23 @@ function LeafletGeoMap({
 }) {
   const { active, result, layers, ui, patchUI, selectPlace, saveMap, notify } = useAppState()
   const parkingData = useParkingData('map')
+  const overlay = useMapOverlay()
+  const parkingTarget = overlay.recommendation ?? overlay.destination
   const live = useLive()
   const liveLayers = useRef<ReturnType<typeof createLiveLayers> | null>(null)
   const confirmedParking = active.parkingSelections?.[active.selected || ''] || null
   const parkingFocus = useRef<string | null>(confirmedParking)
   const parkingController = useRef<ReturnType<typeof createMapLayers> | null>(null)
-  const currentParking = useEffectEvent(() => parkingData.lots)
+  const currentParking = useEffectEvent(() =>
+    parkingTarget
+      ? parkingData.lots.filter(
+          (lot) =>
+            lot.lat !== null &&
+            lot.lng !== null &&
+            distanceMeters([lot.lat, lot.lng], [parkingTarget.lat, parkingTarget.lng]) <= 500,
+        )
+      : parkingData.lots,
+  )
   const root = useRef<HTMLDivElement>(null)
   const map = useRef<ReturnType<typeof L.map> | null>(null)
   const markers = useRef<Map<string, ReturnType<typeof L.marker>>>(new Map())
@@ -159,8 +178,51 @@ function LeafletGeoMap({
       group?.remove()
       group = null
       routeLines.current = []
-      if (!overlay.route?.length && !overlay.food?.length) return
+      if (
+        !overlay.route?.length &&
+        !overlay.food?.length &&
+        !overlay.recommendation &&
+        !overlay.lookup
+      )
+        return
       group = L.layerGroup().addTo(instance)
+      if (overlay.lookup) {
+        const point = overlay.lookup
+        const label = document.createElement('span')
+        label.textContent = point.name
+        L.marker([point.lat, point.lng], {
+          icon: L.divIcon({
+            className: 'sn-recommendation-leaflet',
+            html: label.outerHTML,
+            iconSize: [40, 40],
+            iconAnchor: [20, 40],
+          }),
+          title: `${point.kind === 'parking' ? '주차장' : '장소'} 위치 ${point.name}`,
+          zIndexOffset: 2100,
+        })
+          .addTo(group)
+          .on('click', () => window.dispatchEvent(new Event('sn:open-chat')))
+      }
+      if (overlay.recommendation) {
+        const place = overlay.recommendation
+        const label = document.createElement('span')
+        label.textContent = `${place.rank ? `${place.rank} · ` : ''}${place.name}`
+        L.marker([place.lat, place.lng], {
+          icon: L.divIcon({
+            className: 'sn-recommendation-leaflet',
+            html: label.outerHTML,
+            iconSize: [40, 40],
+            iconAnchor: [20, 40],
+          }),
+          title: `선택한 장소 ${place.name}`,
+          zIndexOffset: 2000,
+        })
+          .addTo(group)
+          .on('click', () => {
+            if (place.onOpenDetail) place.onOpenDetail()
+            else window.dispatchEvent(new Event('sn:open-recommendation'))
+          })
+      }
       if (overlay.route?.length) {
         if (!instance.getPane('sn-route')) instance.createPane('sn-route').style.zIndex = '450'
         for (const path of overlay.routeSegments?.length
@@ -256,6 +318,7 @@ function LeafletGeoMap({
         if (id) window.dispatchEvent(new CustomEvent('sn:parking-select', { detail: { id } }))
       }
       const host = document.createElement('div')
+      const releaseScroll = isolatePopupScroll(host)
       const sdkPopup = L.popup({
         className: 'map-record-popup',
         minWidth: 210,
@@ -266,9 +329,10 @@ function LeafletGeoMap({
       })
         .setLatLng(latlng)
         .setContent(host)
-      sdkPopup.on('remove', () =>
-        setPopup((previous) => (previous?.host === host ? null : previous)),
-      )
+      sdkPopup.on('remove', () => {
+        releaseScroll()
+        setPopup((previous) => (previous?.host === host ? null : previous))
+      })
       sdkPopup.openOn(map.current)
       setPopup({ record, host })
     },
@@ -335,7 +399,9 @@ function LeafletGeoMap({
     const observer = new ResizeObserver(resize)
     observer.observe(root.current)
     resize()
-    if (!view?.center) fitSeoul(instance)
+    const pending = takePendingFocus()
+    if (pending) instance.setView([pending.lat, pending.lng], pending.zoom)
+    else if (!view?.center) fitSeoul(instance)
     return () => {
       stopLive()
       liveLayers.current?.destroy()
@@ -538,8 +604,8 @@ function LeafletGeoMap({
     }
   }, [active.selected, active.excluded, ui.hover, mapResult])
   useEffect(() => {
-    parkingController.current?.updateParking(parkingData.lots)
-  }, [parkingData.lots])
+    parkingController.current?.updateParking(currentParking())
+  }, [parkingData.lots, parkingTarget])
   useEffect(() => {
     parkingFocus.current = confirmedParking
     parkingController.current?.highlightParking(confirmedParking)

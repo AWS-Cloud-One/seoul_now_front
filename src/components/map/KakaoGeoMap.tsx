@@ -1,9 +1,11 @@
 import type { MapRoadSegment } from '../../state/live/store'
+import { LoadingNote } from '../common/ui'
 import { useRoadTraffic } from '../../hooks/useRoadTraffic'
 import { SEOUL_QUERY, type MapQuery } from '../../api/queries'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { loadKakaoSdk } from '../../lib/map/kakaoSdk'
+import { isolatePopupScroll } from '../../lib/map/popupScroll'
 import { useAppState } from '../../state/useAppState'
 import { useParkingData } from '../../hooks/useParkingData'
 import { placeById } from '../../lib/domain.js'
@@ -14,8 +16,10 @@ import {
   getMapOverlay,
   MAP_OVERLAY_EVENT,
   MAP_FOCUS_EVENT,
+  takePendingFocus,
   PARKING_SELECT_EVENT,
   type MapOverlay,
+  distanceMeters,
 } from '../../hooks/useRoute'
 import type { ParkingFacility } from '../../lib/parking/facilities'
 import type { MapRecord as RecordData } from '../../lib/map/mapLayers'
@@ -90,6 +94,7 @@ export default function KakaoGeoMap({
     element.className = 'sn-kakao-record-anchor'
     return element
   })
+  useEffect(() => isolatePopupScroll(popupHost), [popupHost])
   useEffect(() => {
     const map = instance.current,
       container = root.current
@@ -236,6 +241,11 @@ export default function KakaoGeoMap({
         map.setMinLevel(1)
         instance.current = map
         overview(map)
+        const pending = takePendingFocus()
+        if (pending) {
+          map.setLevel(Math.max(1, 20 - pending.zoom))
+          map.setCenter(position(pending.lat, pending.lng))
+        }
         kakao.maps.event.addListener(map, 'idle', scheduleView)
         observer = new ResizeObserver(() => {
           if (!map) return
@@ -621,6 +631,33 @@ export default function KakaoGeoMap({
       const node = endpoint('destination', destination.name)
       add(destination.lat, destination.lng, node, 55, 1)
     }
+    if (overlay.lookup) {
+      const point = overlay.lookup
+      const node = pin(point.name, point.kind === 'parking' ? 'parking' : 'pin', () => {}, true)
+      node.classList.add('sn-recommendation-pin', 'sn-lookup-pin')
+      node.setAttribute(
+        'aria-label',
+        `${point.kind === 'parking' ? '주차장' : '장소'} 위치 ${point.name}`,
+      )
+      node.onclick = () => window.dispatchEvent(new Event('sn:open-chat'))
+      add(point.lat, point.lng, node, 95, 1)
+    }
+    if (overlay.recommendation) {
+      const place = overlay.recommendation
+      const node = pin(
+        `${place.rank ? `${place.rank} · ` : ''}${place.name}`,
+        'pin',
+        () => {},
+        true,
+      )
+      node.classList.add('sn-recommendation-pin')
+      node.setAttribute('aria-label', `선택한 장소 ${place.rank ?? ''} ${place.name}`)
+      node.onclick = () => {
+        if (place.onOpenDetail) place.onOpenDetail()
+        else window.dispatchEvent(new Event('sn:open-recommendation'))
+      }
+      add(place.lat, place.lng, node, 90, 1)
+    }
     if (overlay.route?.length && (overlay.routeSegments?.length || 0) <= 1 && root.current) {
       const projection = map.getProjection()
       for (const mark of routeArrows(
@@ -662,7 +699,15 @@ export default function KakaoGeoMap({
     if (layers.parking) {
       const bounds = map.getBounds(),
         projection = map.getProjection()
-      const facilities = parking.lots
+      const recommendation = overlay.recommendation ?? overlay.destination
+      const facilities = recommendation
+        ? parking.lots.filter(
+            (lot) =>
+              lot.lat !== null &&
+              lot.lng !== null &&
+              distanceMeters([lot.lat, lot.lng], [recommendation.lat, recommendation.lng]) <= 500,
+          )
+        : parking.lots
       const selected = facilities.find((lot) => lot.memberIds.includes(focused || ''))
       const openChoices = (group: ParkingFacility[]) =>
         setRecord({
@@ -688,8 +733,8 @@ export default function KakaoGeoMap({
         const pixel = projection.containerPointFromCoords(position(lot.lat, lot.lng))
         const nearby = anchors.find(
           (anchor) =>
-            Math.abs(anchor.x - pixel.x) < (level >= 5 ? 90 : 76) &&
-            Math.abs(anchor.y - pixel.y) < (anchor.key === selectedKey ? 60 : 46),
+            Math.abs(anchor.x - pixel.x) < (level >= 5 ? 136 : 112) &&
+            Math.abs(anchor.y - pixel.y) < (anchor.key === selectedKey ? 76 : 68),
         )
         const key = nearby?.key || `${lot.lat},${lot.lng}`
         if (!nearby) anchors.push({ key, x: pixel.x, y: pixel.y })
@@ -707,7 +752,7 @@ export default function KakaoGeoMap({
         button.innerHTML = svg('car')
         if (group.length > 1) {
           const count = document.createElement('b')
-          count.textContent = String(group.length)
+          count.textContent = `${group.length}곳`
           button.append(count)
         }
         button.setAttribute(
@@ -784,6 +829,8 @@ export default function KakaoGeoMap({
     parking.lots,
     focused,
     overlay.food,
+    overlay.recommendation,
+    overlay.lookup,
     overlay.destination,
     overlay.origin,
     overlay.route,
@@ -864,8 +911,8 @@ export default function KakaoGeoMap({
         </div>
       )}
       {!ready && !error && (
-        <div className="sn-kakao-loading" role="status">
-          카카오 지도를 불러오는 중이에요…
+        <div className="sn-kakao-loading">
+          <LoadingNote>카카오 지도를 불러오는 중이에요…</LoadingNote>
         </div>
       )}
       {record &&

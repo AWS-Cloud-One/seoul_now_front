@@ -130,6 +130,31 @@ export const ErrorState = ({
     {onRetry && <SecondaryButton onClick={onRetry}>다시 시도</SecondaryButton>}
   </div>
 )
+/** Label/value rows that use the full panel width (label left, value right). */
+export const FactRows = ({ rows, label }: { rows: [ReactNode, ReactNode][]; label?: string }) =>
+  rows.length ? (
+    <dl className="sn-rows" aria-label={label}>
+      {rows.map(([key, value], i) => (
+        <div key={i}>
+          <dt>{key}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  ) : null
+/** One loading line for sections, map overlays and lists that are not tall enough for skeletons. */
+export const LoadingNote = ({
+  children,
+  className = '',
+}: {
+  children: ReactNode
+  className?: string
+}) => (
+  <p className={`sn-loading ${className}`} role="status">
+    <span className="sn-spinner" aria-hidden="true" />
+    <span>{children}</span>
+  </p>
+)
 export const LoadingSkeleton = ({ rows = 3 }: { rows?: number }) => (
   <div className="sn-skeletons" role="status" aria-label="불러오는 중">
     {Array.from({ length: rows }, (_, i) => (

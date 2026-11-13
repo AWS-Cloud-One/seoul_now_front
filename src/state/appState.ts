@@ -51,6 +51,7 @@ const initialUI = () => ({
   drawer: false,
   detail: null as { id: string; resultId: string; expanded: boolean } | null,
   toast: '',
+  toastAction: null as { label: string; onClick: () => void } | null,
   hover: null as string | null,
   storageOK: true,
 })
@@ -302,10 +303,17 @@ export function useAppStateController() {
       if (getResult()?.id === last.resultId) await retryRoute()
     } else await recommendFromApi(last.patch)
   }
-  function notify(text: string) {
+  function notify(text: string, action: { label: string; onClick: () => void } | null = null) {
     clearTimeout(toastTimer.current)
-    patchUI({ toast: text })
-    toastTimer.current = setTimeout(() => patchUI({ toast: '' }), 4200)
+    patchUI({ toast: text, toastAction: action })
+    toastTimer.current = setTimeout(
+      () => patchUI({ toast: '', toastAction: null }),
+      action ? 8000 : 4200,
+    )
+  }
+  function dismissToast() {
+    clearTimeout(toastTimer.current)
+    patchUI({ toast: '', toastAction: null })
   }
   useEffect(() => {
     try {
@@ -346,22 +354,6 @@ export function useAppStateController() {
         message(t, '여행을 바꾸면서 진행 중인 요청을 멈췄어요. 이 여행에서 이어서 요청해 주세요.')
     })
   }
-  function switchTrip(tripId: string) {
-    preserveWorkspace()
-    invalidateRequests()
-    updateStore((s) => {
-      s.activeTripId = tripId
-    })
-    patchUI({
-      busy: false,
-      progress: null,
-      panel: null,
-      detail: null,
-      drawer: false,
-      notice: getTrip().workspaceView?.notice || null,
-    })
-    navigate('main')
-  }
   function newTrip() {
     preserveWorkspace()
     const trip = newState()
@@ -379,20 +371,6 @@ export function useAppStateController() {
       notice: null,
     })
     navigate('main')
-  }
-  function deleteTrip(tripId: string) {
-    const wasActive = getTrip().trip === tripId
-    if (wasActive) invalidateRequests()
-    updateStore((s) => {
-      s.trips = s.trips.filter((t) => t.trip !== tripId)
-      if (!s.trips.length) s.trips.push(newState())
-      if (wasActive) s.activeTripId = s.trips[0].trip
-    })
-    patchUI({
-      panel: null,
-      ...(wasActive ? { busy: false, progress: null, detail: null, notice: null } : {}),
-    })
-    notify('여행을 삭제했어요.')
   }
   function activateResult(resultId: string, selectedId?: string) {
     const target = [...getTrip().groups, ...(getTrip().general ? [getTrip().general!] : [])].find(
@@ -622,14 +600,6 @@ export function useAppStateController() {
     })
     notify('다음 탐색에서 제외돼요. 현재 카드와 마커는 그대로 남겨두었어요.')
   }
-  function renameTrip(id: string, title: string) {
-    if (!title.trim()) return
-    updateStore((s) => {
-      const trip = s.trips.find((t) => t.trip === id)
-      if (trip) trip.title = title.trim().slice(0, 40)
-    })
-    patchUI({ panel: null })
-  }
   function updateDraft(conditions: Conditions) {
     updateTrip((t) => {
       t.onboardingDraft = conditions
@@ -777,11 +747,9 @@ export function useAppStateController() {
     ui,
     patchUI,
     notify,
+    dismissToast,
     navigate,
-    switchTrip,
     newTrip,
-    deleteTrip,
-    renameTrip,
     activateResult,
     openDetail,
     retryRoute,

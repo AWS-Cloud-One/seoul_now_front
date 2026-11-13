@@ -6,6 +6,8 @@ import type { ParkingLot } from '../../types/parking'
 import { useSecondsRemaining } from '../../hooks/useSecondsRemaining'
 import { dateLabel } from '../../lib/domain.js'
 import InformationMeta from '../common/InformationMeta'
+import { FactRows, LoadingNote, SecondaryButton } from '../common/ui'
+import { sourceName } from '../../lib/sourceNames'
 
 export default function ParkingRegistration({ lot }: { lot: ParkingLot }) {
   const [detail, setDetail] = useState<ParkingDetail | null>(lot.api?.detail || null)
@@ -39,68 +41,60 @@ export default function ParkingRegistration({ lot }: { lot: ParkingLot }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lot.id, attempt, remember])
   const records = detail?.records || lot.api?.facility.records || []
+  const won = (value: number | null | undefined, minutes?: number | null) =>
+    value === null || value === undefined
+      ? '미확인'
+      : `${minutes ? `${minutes}분 ` : ''}${value.toLocaleString('ko-KR')}원`
   return (
-    <section className="sn-section" aria-label="주차 등록 상세">
+    <section className="sn-parking-detail" aria-label="주차 등록 상세">
       <strong>{lot.name}</strong>
-      <p>현재 빈자리와 외부 차량 이용 가능 여부는 미확인이에요.</p>
+      <p className="sn-note">현재 빈자리와 외부 차량 이용 가능 여부는 미확인이에요.</p>
       {error && <p role="alert">{error}</p>}
-      {!detail && !error && <p role="status">등록 자료를 조회하고 있어요…</p>}
+      {!detail && !error && <LoadingNote>등록 자료를 조회하고 있어요…</LoadingNote>}
       {detail && (
-        <p className="sn-note">
-          상세 조회: {dateLabel(detail.checked_at)} ·{' '}
+        <p className="sn-meta">
+          상세 조회 {dateLabel(detail.checked_at)} ·{' '}
           {detail.identity_status === 'verified' ? '시설 식별 확인' : '시설 식별 미확인'}
         </p>
       )}
-      {records.map((record) => {
+      {records.map((record, index) => {
         const value = record.registered.value,
-          fees = value?.fees
+          fees = value?.fees,
+          hours = value?.operating_hours
         return (
-          <details key={record.source_record_id}>
-            <summary>{record.source} 등록 자료</summary>
-            <p>
-              {value?.address || '주소 미확인'} · 등록면수 {value?.registered_capacity ?? '미확인'}
-            </p>
-            <p>
-              기본요금:{' '}
-              {fees?.base_fee_krw !== null &&
-              fees?.base_fee_krw !== undefined &&
-              fees.base_minutes !== null
-                ? `${fees.base_minutes}분 ${fees.base_fee_krw.toLocaleString('ko-KR')}원`
-                : '미확인'}
-            </p>
-            <p>
-              추가요금:{' '}
-              {fees?.additional_fee_krw !== null &&
-              fees?.additional_fee_krw !== undefined &&
-              fees.additional_minutes !== null
-                ? `${fees.additional_minutes}분 ${fees.additional_fee_krw.toLocaleString('ko-KR')}원`
-                : '미확인'}
-            </p>
-            <p>
-              일 최대요금:{' '}
-              {fees?.daily_max_krw === null || fees?.daily_max_krw === undefined
-                ? '미확인'
-                : `${fees.daily_max_krw.toLocaleString('ko-KR')}원`}
-            </p>
-            {fees?.notes && <p>{fees.notes}</p>}
-            <p>
-              평일: {value?.operating_hours?.weekdays || '미확인'}
-              <br />
-              토요일: {value?.operating_hours?.saturday || '미확인'}
-              <br />
-              일·공휴일: {value?.operating_hours?.sunday_holidays || '미확인'}
-            </p>
-            {value?.operating_hours?.notes && <p>{value.operating_hours.notes}</p>}
-            {record.reference_date && <p>등록 기준일: {record.reference_date}</p>}
+          <details key={record.source_record_id} open={index === 0}>
+            <summary>{sourceName(record.source)} 등록 정보</summary>
+            <FactRows
+              rows={[
+                ['주소', value?.address || '미확인'],
+                [
+                  '등록면수',
+                  value?.registered_capacity === null || value?.registered_capacity === undefined
+                    ? '미확인'
+                    : `${value.registered_capacity}면`,
+                ],
+                ['기본요금', won(fees?.base_fee_krw, fees?.base_minutes)],
+                ['추가요금', won(fees?.additional_fee_krw, fees?.additional_minutes)],
+                ['일 최대요금', won(fees?.daily_max_krw)],
+                ['평일', hours?.weekdays || '미확인'],
+                ['토요일', hours?.saturday || '미확인'],
+                ['일·공휴일', hours?.sunday_holidays || '미확인'],
+                ...(record.reference_date
+                  ? [['등록 기준일', record.reference_date] as [string, string]]
+                  : []),
+              ]}
+            />
+            {fees?.notes && <p className="sn-note">{fees.notes}</p>}
+            {hours?.notes && <p className="sn-note">{hours.notes}</p>}
             <InformationMeta information={record.registered} />
           </details>
         )
       })}
-      {wait > 0 && <p>{wait}초 후 다시 조회할 수 있어요.</p>}
+      {wait > 0 && <p className="sn-note">{wait}초 후 다시 조회할 수 있어요.</p>}
       {error && (
-        <button type="button" disabled={wait > 0} onClick={() => setAttempt((v) => v + 1)}>
+        <SecondaryButton disabled={wait > 0} onClick={() => setAttempt((v) => v + 1)}>
           주차 상세 다시 조회
-        </button>
+        </SecondaryButton>
       )}
     </section>
   )

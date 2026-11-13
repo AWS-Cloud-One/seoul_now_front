@@ -108,7 +108,7 @@ export function createMapLayers(
   }
   function parkingGrid(map, zoom, locations, cache) {
     if (cache.has(zoom)) return cache.get(zoom)
-    const cell = zoom < 15 ? 108 : zoom < 17 ? 84 : 64,
+    const cell = zoom < 15 ? 144 : zoom < 17 ? 112 : 88,
       groups = new Map()
     for (const location of locations) {
       const point = map.project([location.lat, location.lng], zoom),
@@ -333,14 +333,14 @@ export function createMapLayers(
         const { key, locations, lat, lng } = group
         present.add(key)
         if (parkingItems.has(key)) continue
-        const count = locations.length,
-          cluster = count > 1
+        const count = locations.reduce((total, location) => total + location.records.length, 0),
+          cluster = locations.length > 1
         const label = cluster
           ? `주차장 ${count}개 · 눌러서 확대`
           : `${locations[0].records[0].name}${locations[0].records[0].available === null ? '' : ` · ${parkingAvailability(locations[0].records[0].available)}`}`
         const available = locations[0].records[0].available
         // Unknown vacancy is stated once in the legend/detail, not on every marker.
-        const badge = cluster ? count : available === 0 ? '만차' : null
+        const badge = cluster ? `${count}곳` : available === 0 ? '만차' : null
         const marker = L.marker([lat, lng], {
           pane: 'registered-parking',
           icon: L.divIcon({

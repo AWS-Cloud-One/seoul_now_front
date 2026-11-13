@@ -2,16 +2,19 @@
 
 서울 여행 중 다음 방문 장소를 비교하고 선택하는 웹 화면을 개발하는 저장소입니다.
 
-기본 화면(`/`)은 전달받은 **서울_지금_어디_데모.html**을 **React 컴포넌트로 변환**한 화면입니다. 시작 화면, 지도 미리보기, 조건 입력, 대화, 추천 카드, 장소 상세, 여행별 이름·삭제·기록을 React 상태로 관리합니다. 추천·대화·지도·주차·길찾기는 **백엔드 API**(`src/api/`, 기본 `/api/v1`)를 사용합니다. 지도 배경 타일은 인터넷 연결이 필요합니다.
+기본 화면(`/`)은 시작 화면과 지도 홈·AI 추천·길찾기·저장 탭으로 구성됩니다. **AI 추천과 채팅은 `src/chat/`의 기본 기능**이며 서버의 `/api/v2/chat` 계약을 사용합니다. 지도·주차·길찾기는 `/api/v1`에 연결합니다. 지도 배경 타일은 인터넷 연결이 필요합니다.
+
+채팅은 환경변수 없이도 실제 API에 연결합니다. 로컬 백엔드는 기본 API `8000`, 채팅 API `8001` 두 프로세스로 실행하며 Vite 프록시가 나누어 전달합니다. `VITE_CHAT_MODE=mock`은 서버 없이 화면을 개발할 때만 사용합니다. 이전 `VITE_CHAT_V2` 활성화 옵션은 제거했습니다. 기존 로컬 설정은 `VITE_CHAT_MODE`, `VITE_CHAT_BASE_URL`, `CHAT_PROXY_TARGET`으로 이름을 맞춰 주세요([채팅 모듈 안내](src/chat/README.md)).
 
 - 실행: 프로젝트 루트에서 `npm ci` 후 `npm run dev` → http://127.0.0.1:5173/
 - 진입점: `index.html` → `src/main.tsx` → `src/App.tsx` → `src/pages/` (시작 화면 `StartScreen.tsx`, 작업 화면 `AppShell.tsx`)
+- 기본 채팅·추천: `src/chat/components/`, `state/`, `api/`, `model/`. `components/chat/`·`components/recommendation/`의 이전 화면은 기본 라우트에서 사용하지 않습니다.
 - 화면 조각: `src/components/<기능>/` (대화·추천·장소·길찾기·지도·주차·저장·작업 화면·공통)
 - 여행·요청 상태: `src/state/appState.ts`, `AppStateProvider.tsx`, `useAppState.ts`. 세션 복원은 `tripStorage.ts`이며 원본과 같은 세션 저장 키를 사용해 기존 여행도 복원합니다.
 - 조건·여행 공통 처리: `src/lib/domain.js`(형식 선언 `domain.d.ts`). 출발지 예시 목록은 `src/lib/departures.ts`. 장소 정보는 서버 응답의 스냅샷만 사용합니다(로컬 장소 목록·모의 추천 없음).
 - 도로·주차·인구 지도 자료는 백엔드 지도 API(`src/api/mapLayers.ts`)에서 받습니다. 지도 SDK와 캔버스 레이어의 생성·해제는 `src/components/map/GeoMap.tsx`, `src/lib/map/mapLayers.js`에서 관리하며 정보 팝업은 React portal로 렌더링합니다.
 - 스타일: `src/styles/index.css`가 순서대로 불러옵니다(원본 디자인 CSS는 `src/styles/design/`, 순서 유지). 글꼴: `src/assets/fonts/`, 이미지: `public/images/`
-- 저장한 여행: 추천 결과의 **여행 저장** 또는 챗봇 아래 **북마크 메뉴 → 현재 추천 저장**으로 보관합니다. 저장 목록은 `localStorage`의 `seoul-saved-trips-v1`에 유지되며, 목록을 누르면 새 요청 없이 저장 당시 추천·조건·선택 장소를 복원합니다. 최근 5개 추천 기록이나 세션 여행이 삭제돼도 저장본은 유지됩니다.
+- 저장한 추천: 카드의 **추천 묶음 저장**으로 보관하고 저장 탭에서 다시 엽니다. 기본 저장 키는 `sn-saved-recommendations-v2`이며 이전 `seoul-saved-trips-v1` 저장본은 읽기 전용 목록에서 계속 확인할 수 있습니다. 대화 본문은 서버에서 복원하고 브라우저에는 세션·대화 식별자와 미확인 요청만 남깁니다.
 - 현재 화면 검증: `src/__tests__/currentScreen.test.tsx`에서 시작 화면·주요 메뉴 이동·필수 이미지와 글꼴을 직접 검증합니다.
 - 검증: `npm run typecheck`, `npm run lint`, `npm run test -- --maxWorkers=1`, `npm run build`
 - `npm run build` 결과는 `dist/`에 생성됩니다.

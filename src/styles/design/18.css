@@ -1,26 +1,14 @@
 
-.map-source-summary{display:flex;gap:6px;margin:11px 0 4px;color:var(--muted);font-size:10px}
 .real-map{background:#f5f6f8}
 /* Only the basemap is muted; traffic, population and destination overlays retain color. */
 .real-map .leaflet-tile-pane{filter:saturate(.7) contrast(.92) brightness(1.03);opacity:.94}
-.map-controls button:disabled{opacity:.35;cursor:default;pointer-events:none}
 .real-map .demo-origin-marker{display:grid;place-items:center;background:transparent;border:0;cursor:pointer;pointer-events:auto}
 .demo-origin-marker>span{display:block;width:16px;height:16px;border:3px solid #fff;border-radius:50%;background:#2d63df;box-shadow:0 0 0 6px #3972e529,0 1px 6px #1839705c}
 .demo-origin-marker:focus-visible{outline:2px solid #2d63df;outline-offset:4px;border-radius:50%}
 .real-map .demo-origin-label{padding:5px 7px;border:1px solid #b7cbef;border-radius:6px;background:#fff;color:#234eaa;box-shadow:0 2px 7px #18397021;font:700 11px var(--app-font);line-height:1.3}
 .demo-origin-label small{margin-left:3px;color:#6c7e9a;font-size:9px;font-weight:500}
 .real-map .demo-origin-label:before{border-left-color:#b7cbef}
-.map-source-summary span{padding:3px 6px;border:1px solid var(--line);border-radius:4px}
-.map-layer-key{margin:0;padding:10px 0;border-bottom:1px solid var(--line)}
-.map-layer-key>strong{display:flex;align-items:baseline;gap:7px;font-size:11px;color:var(--ink)}
-.map-layer-key>strong small{font-size:10px;font-weight:400;color:var(--muted)}
-.map-layer-key p,.map-layer-hint,.map-data-note{font-size:10px;line-height:1.65;color:var(--muted);margin:6px 0 0}
-.map-data-note{margin-top:10px}
-.map-color-key{display:flex;flex-wrap:wrap;gap:5px 10px;margin-top:8px;font-size:10px;color:var(--pc-secondary)}
-.map-color-key span{display:flex;align-items:center;gap:4px}
-.map-color-key i{display:block;width:9px;height:5px;border-radius:2px}
 .population-heat-canvas{position:absolute;pointer-events:none;opacity:.9}
-.population-heat-key{height:6px;border-radius:6px;margin-top:10px;background:linear-gradient(90deg,#679dd5,#dfbb58,#e58b44,#cf5c70)}
 .map-parking-zoom-hint{position:absolute;top:96px;left:14px;z-index:590;display:flex;align-items:center;gap:6px;min-height:0;padding:6px 9px;background:#fffffff0;border:1px solid #dce3ee;border-radius:7px;box-shadow:0 2px 7px #2432480c;color:#526681;font:500 10px var(--app-font);cursor:pointer}
 .map-parking-zoom-hint[hidden]{display:none}
 .map-parking-zoom-hint>span{font-weight:750;color:#315789}

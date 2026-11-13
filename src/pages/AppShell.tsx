@@ -1,31 +1,52 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { ArchivedRecommendations } from '../chat/components/ArchivedRecommendations'
+import { PlaceDetailsHost } from '../chat/components/PlaceDetailsHost'
+import { useSavedRecommendations } from '../chat/state/recommendations'
 import { useAppState } from '../state/useAppState'
 import Icon from '../components/common/Icon'
+import { LoadingNote } from '../components/common/ui'
 import { LayoutContext, nextLayout, type Layout } from '../hooks/layout'
-import { LayerMenu, MapLegend, SelectionSummary } from '../components/map/MapOverlays'
+import { LayerMenu, MapLegend } from '../components/map/MapOverlays'
 import { HomePanel } from '../components/workspace/LivePanel'
-import { ParkingPanel, SavedPanel } from '../components/workspace/OtherPanels'
-import ChatPanel from '../components/chat/ChatPanel'
+import { ParkingPanel } from '../components/workspace/OtherPanels'
 import DirectionsPanel from '../components/directions/DirectionsPanel'
-import RecommendPanel from '../components/recommendation/RecommendPanel'
-import { useRoute } from '../hooks/useRoute'
+import { setMapOverlay, useRoute } from '../hooks/useRoute'
 import { useVisualViewport } from '../hooks/useVisualViewport'
 import type { CSSProperties, PointerEvent } from 'react'
 import type { Route } from '../hooks/useRoute'
 
 const GeoMap = lazy(() => import('../components/map/GeoMap'))
-const NAV: { route: Route; label: string; icon: string }[] = [
+const ChatPanel = lazy(() => import('../chat/components/ChatPanel'))
+// Four top-level tabs. AI 대화 is a view of the AI 추천 tab (same trip and results), and the
+// parking list is a sub-view opened from a place or the map; neither has its own tab.
+type Tab = 'home' | 'recommend' | 'directions' | 'saved'
+const NAV: { route: Tab; label: string; icon: string }[] = [
   { route: 'home', label: '지도 홈', icon: 'home' },
-  { route: 'recommend', label: 'AI 추천', icon: 'sparkle' },
-  { route: 'chat', label: 'AI 대화', icon: 'chat' },
+  { route: 'recommend', label: 'AI 추천', icon: 'chat' },
   { route: 'directions', label: '길찾기', icon: 'map' },
-  { route: 'parking', label: '주차장', icon: 'parking' },
   { route: 'saved', label: '저장', icon: 'bookmark' },
 ]
+const TITLES: Record<Route, string> = {
+  home: '지도 홈',
+  recommend: 'AI 추천',
+  chat: 'AI 대화',
+  directions: '길찾기',
+  parking: '주차장',
+  saved: '저장',
+}
+const BACK_LABEL: Record<Tab, string> = {
+  home: '지도 홈으로',
+  recommend: '추천으로 돌아가기',
+  directions: '길찾기로 돌아가기',
+  saved: '저장으로 돌아가기',
+}
+const tabOf = (route: Route, parkingFrom: Tab): Tab =>
+  route === 'chat' ? 'recommend' : route === 'parking' ? parkingFrom : route
 type Sheet = 'peek' | 'half' | 'full'
 
 export default function AppShell() {
-  const { active, result, ui, patchUI, openDetail, savedTrips } = useAppState()
+  const { active, result, ui, patchUI, savedTrips, notify } = useAppState()
+  const savedCount = useSavedRecommendations().length + savedTrips.length
   const [route, go] = useRoute()
   const [open, setOpen] = useState(true)
   const [width, setWidth] = useState(() => {
@@ -63,6 +84,10 @@ export default function AppShell() {
   } | null>(null)
   const suppressSheetClick = useRef(false)
   const [chatMap, setChatMap] = useState(false)
+  // Which tab opened the parking list: it stays highlighted and the list returns there.
+  const [parkingFrom, setParkingFrom] = useState<Tab>('home')
+  const parkingFromApp = useRef(false)
+  const tab = tabOf(route, parkingFrom)
   const finishSheetDrag = (event: PointerEvent<HTMLButtonElement>, cancelled = false) => {
     const current = sheetDrag.current
     if (!current) return
@@ -83,9 +108,35 @@ export default function AppShell() {
   const visibleViewport = useVisualViewport()
   const hasResult = !!result
   useEffect(() => {
-    document.title = `${NAV.find((n) => n.route === route)!.label} · 밖과사전`
+    document.title = `${TITLES[route]} · 밖과사전`
+    if (route === 'home' || route === 'parking' || route === 'directions')
+      setMapOverlay({ recommendation: null, lookup: null })
+    if (route === 'home') setMapOverlay({ destination: null })
   }, [route])
+  useEffect(() => {
+    const openRecommendation = () => {
+      go('recommend')
+      setOpen(true)
+      setSheet('full')
+      setChatMap(false)
+    }
+    const openChat = () => {
+      go('chat')
+      setOpen(true)
+      setChatMap(false)
+    }
+    window.addEventListener('sn:open-recommendation', openRecommendation)
+    window.addEventListener('sn:open-chat', openChat)
+    return () => {
+      window.removeEventListener('sn:open-recommendation', openRecommendation)
+      window.removeEventListener('sn:open-chat', openChat)
+    }
+  }, [go])
   const select = (next: Route) => {
+    if (next === 'parking' && route !== 'parking') {
+      setParkingFrom(tab)
+      parkingFromApp.current = true
+    }
     go(next)
     if (next === 'chat') setChatMap(false)
     setOpen(true)
@@ -98,7 +149,10 @@ export default function AppShell() {
   }, [route, ui.detail])
   useEffect(() => {
     const sync = () => {
-      if (!window.location.hash.endsWith('/detail') && ui.detail) patchUI({ detail: null })
+      // The parking sub-view keeps the place detail it was opened from, so Back returns to it.
+      const hash = window.location.hash
+      if (!hash.endsWith('/detail') && !hash.startsWith('#/parking') && ui.detail)
+        patchUI({ detail: null })
     }
     window.addEventListener('hashchange', sync)
     return () => window.removeEventListener('hashchange', sync)
@@ -107,15 +161,39 @@ export default function AppShell() {
     route === 'home' ? (
       <HomePanel go={select} />
     ) : route === 'recommend' ? (
-      <RecommendPanel go={select} />
+      <Suspense fallback={<LoadingNote>추천 목록을 불러오고 있어요…</LoadingNote>}>
+        <ChatPanel
+          view="recommend"
+          go={select}
+          onShowMap={() => setSheet('peek')}
+          onNotify={notify}
+        />
+      </Suspense>
     ) : route === 'chat' ? (
-      <ChatPanel go={select} onShowMap={() => setChatMap(true)} />
+      <Suspense fallback={<LoadingNote>대화 화면을 불러오고 있어요…</LoadingNote>}>
+        <ChatPanel go={select} onShowMap={() => setChatMap(true)} onNotify={notify} />
+      </Suspense>
     ) : route === 'directions' ? (
       <DirectionsPanel go={select} />
     ) : route === 'parking' ? (
-      <ParkingPanel go={select} />
+      <ParkingPanel
+        from={parkingFrom}
+        back={{
+          label: BACK_LABEL[parkingFrom],
+          onClick: () => {
+            // Return to the exact previous screen (e.g. a place detail) when we came from it.
+            if (parkingFromApp.current) {
+              parkingFromApp.current = false
+              window.history.back()
+            } else select(parkingFrom)
+          },
+        }}
+      />
     ) : (
-      <SavedPanel go={select} />
+      <Suspense fallback={<LoadingNote>저장한 추천을 불러오고 있어요…</LoadingNote>}>
+        <ChatPanel view="saved" go={select} />
+        <ArchivedRecommendations go={select} onShowMap={() => setOpen(false)} />
+      </Suspense>
     )
   return (
     <LayoutContext.Provider value={layout}>
@@ -124,6 +202,7 @@ export default function AppShell() {
         data-open={open}
         data-sheet={displayedSheet}
         data-chat-map={route === 'chat' && chatMap}
+        data-result-map={route === 'recommend' && sheet === 'peek'}
         data-route={route}
         data-has-results={hasResult}
         data-keyboard={visibleViewport.keyboard}
@@ -144,8 +223,8 @@ export default function AppShell() {
           <button
             type="button"
             className="sn-logo"
-            aria-label="서울 나우 — 처음부터 새로고침"
-            onClick={() => window.location.reload()}
+            aria-label="밖과사전 지도 홈"
+            onClick={() => select('home')}
           >
             <Icon name="pin" />
           </button>
@@ -154,26 +233,27 @@ export default function AppShell() {
               type="button"
               key={item.route}
               className="sn-nav"
-              aria-current={route === item.route ? 'page' : undefined}
+              aria-current={tab === item.route ? 'page' : undefined}
               onClick={() => select(item.route)}
             >
               <Icon name={item.icon} />
               <span>{item.label}</span>
-              {item.route === 'saved' && savedTrips.length > 0 && (
-                <i className="sn-dot" aria-label={`${savedTrips.length}개`} />
+              {item.route === 'saved' && savedCount > 0 && (
+                <i className="sn-dot" aria-label={`${savedCount}개`} />
               )}
             </button>
           ))}
         </nav>
         <aside className="sn-panel" id="sn-panel" aria-label="탐색 패널" tabIndex={-1}>
-          {route === 'chat' && chatMap && (
+          {((route === 'chat' && chatMap) || (route === 'recommend' && sheet === 'peek')) && (
             <button
               type="button"
               className="sn-chat-return"
-              onClick={() => setChatMap(false)}
+              onClick={() => (route === 'chat' ? setChatMap(false) : setSheet('full'))}
               aria-controls="sn-panel-content"
             >
-              <Icon name="chat" /> 대화로 돌아가기 <Icon name="chevronUp" />
+              <Icon name="chat" /> {route === 'chat' ? '대화로 돌아가기' : '추천으로 돌아가기'}{' '}
+              <Icon name="chevronUp" />
             </button>
           )}
           <button
@@ -289,8 +369,8 @@ export default function AppShell() {
         <main className="sn-map" id="sn-main" aria-label="지도">
           <Suspense
             fallback={
-              <div className="sn-map-loading" role="status">
-                서울 지도를 준비하고 있어요…
+              <div className="sn-map-loading">
+                <LoadingNote>서울 지도를 준비하고 있어요…</LoadingNote>
               </div>
             }
           >
@@ -300,13 +380,13 @@ export default function AppShell() {
             <LayerMenu />
           </div>
           <MapLegend />
-          {route === 'chat' && (
-            <SelectionSummary
-              onDetail={() => active.selected && openDetail(active.selected)}
-              onParking={() => select('parking')}
-            />
-          )}
         </main>
+        <PlaceDetailsHost
+          onShowMap={() => {
+            if (route === 'chat') setChatMap(true)
+            else setSheet('peek')
+          }}
+        />
       </div>
     </LayoutContext.Provider>
   )

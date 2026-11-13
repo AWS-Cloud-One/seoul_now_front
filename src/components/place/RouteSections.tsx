@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-import { DEPARTURES } from '../../lib/departures'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import {
   ApiProblem,
   fetchDirections,
@@ -26,7 +25,6 @@ import type { FoundPlaceData } from '../../api/queries'
 import { foundPlace } from '../../api/routing'
 import { useSecondsRemaining } from '../../hooks/useSecondsRemaining'
 
-const ME = '__me__'
 /** Small stand-in mark (yellow tile + pin), not the official Kakao asset. */
 function KakaoMapMark() {
   return (
@@ -64,7 +62,11 @@ function useLoader<T>(run: (signal: AbortSignal) => Promise<T>) {
   // Callers remount this hook per place (key), so state resets by itself; just cancel on unmount.
   useEffect(() => () => controller.current?.abort(), [])
   const load = () => {
-    if (retryAt.current > Date.now() || state.status === 'loading') return
+    if (
+      retryAt.current > Date.now() ||
+      (state.status === 'loading' && controller.current && !controller.current.signal.aborted)
+    )
+      return
     controller.current?.abort()
     const current = new AbortController()
     controller.current = current
@@ -91,87 +93,48 @@ function useLoader<T>(run: (signal: AbortSignal) => Promise<T>) {
 
 export function RouteSection({
   place,
-  departure,
-  originOverride,
+  origin,
+  autoLoad = false,
+  onChangeOrigin,
 }: {
   place: Target
-  departure: string | null
-  originOverride?: Target | null
+  /** The departure (shared origin, or the original origin of a recommendation). */
+  origin: Target | null
+  /** Find the route right away (e.g. opened through "여기까지 길찾기"). */
+  autoLoad?: boolean
+  /** Lets the user change the departure (the shared origin picker on the map). */
+  onChangeOrigin?: () => void
 }) {
-  const [chosen, setChosen] = useState(departure && DEPARTURES[departure] ? departure : '')
-  const [me, setMe] = useState<{ lat: number; lon: number } | null>(null)
-  const [locating, setLocating] = useState<string | null>(null)
-  const origin =
-    originOverride !== undefined
-      ? originOverride
-      : chosen === ME
-        ? (me ?? undefined)
-        : chosen
-          ? DEPARTURES[chosen]
-          : undefined
-  const [state, load, reset, wait] = useLoader<RouteResult>((signal) =>
+  const [state, load, , wait] = useLoader<RouteResult>((signal) =>
     fetchDirections(origin!, place, signal),
   )
-  const choose = (value: string) => {
-    setChosen(value)
-    setLocating(null)
-    reset()
-    if (value !== ME) return
-    if (!navigator.geolocation) {
-      setLocating('이 브라우저는 위치 기능을 지원하지 않아요.')
-      return
-    }
-    setLocating('내 위치를 확인하는 중이에요…')
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setMe({ lat: position.coords.latitude, lon: position.coords.longitude })
-        setLocating(null)
-      },
-      (error) =>
-        setLocating(
-          error.code === error.PERMISSION_DENIED
-            ? '위치 권한이 거부됐어요. 브라우저 설정에서 허용하거나 목록에서 출발지를 골라 주세요.'
-            : '내 위치를 가져오지 못했어요. 목록에서 출발지를 골라 주세요.',
-        ),
-      { timeout: 10000 },
-    )
-  }
+  const autoLoadRoute = useEffectEvent(load)
+  const originId = origin?.id
+  useEffect(() => {
+    if (autoLoad && originId) autoLoadRoute()
+  }, [autoLoad, originId])
   useEffect(() => {
     setMapOverlay({
       route: state.status === 'done' ? state.data.path : null,
       routeSegments: state.status === 'done' ? state.data.segments || [] : null,
-      origin:
-        state.status === 'done' && origin
-          ? { ...origin, name: originOverride?.name || (chosen === ME ? '내 위치' : chosen) }
-          : null,
+      origin: state.status === 'done' && origin ? origin : null,
     })
     return () => setMapOverlay({ route: null, routeSegments: null, origin: null })
-  }, [state, origin, originOverride?.name, chosen])
+  }, [state, origin])
   return (
     <section className="sn-section" aria-labelledby="sn-route-title">
       <h3 id="sn-route-title">가는 길</h3>
       {wait > 0 && <p role="status">{wait}초 후 다시 조회할 수 있어요.</p>}
-      {originOverride === undefined && (
-        <label className="sn-field">
-          출발지
-          <select value={chosen} onChange={(event) => choose(event.target.value)}>
-            <option value="">출발지를 선택해 주세요</option>
-            <option value={ME}>내 위치</option>
-            {Object.keys(DEPARTURES).map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      {locating ? (
-        <p className="sn-note" role="status">
-          {locating}
+      <div className="sn-route-origin">
+        <p className="sn-note">
+          {origin ? `${origin.name}에서 출발` : '출발지를 정하면 길찾기를 할 수 있어요.'}
         </p>
-      ) : (
-        !origin && <p className="sn-note">출발지를 선택하면 길찾기를 할 수 있어요.</p>
-      )}
+        {onChangeOrigin && (
+          <button type="button" className="sn-link" onClick={onChangeOrigin}>
+            {origin ? '출발지 변경' : '출발지 정하기'}
+          </button>
+        )}
+      </div>
       {state.status === 'idle' || state.status === 'loading' ? (
         <PrimaryButton onClick={load} disabled={!origin || state.status === 'loading'}>
           <Icon name="car" />

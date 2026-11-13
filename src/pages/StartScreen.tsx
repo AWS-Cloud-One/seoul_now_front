@@ -22,9 +22,9 @@ export function StartScreen() {
             />
           </h1>
           <p>
-            실시간 교통 및 주차 데이터를 바탕으로
+            서울의 장소와 교통·주차 정보를 함께 살펴보고
             <br />
-            가장 완벽한 동선의 서울 장소를 제안합니다.
+            오늘 차로 떠날 곳을 찾아보세요.
           </p>
         </div>
         <div className="start-screen-bottom">

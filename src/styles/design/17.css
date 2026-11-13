@@ -4,135 +4,25 @@
 body{background:var(--paper);color:var(--ink)}
 button{background:var(--white);color:var(--ink);border-color:var(--line)}
 button:hover{background:var(--pc-hover);border-color:var(--pc-border-hover)}
-button.primary,.place-summary-foot button.primary,.detail-host .place-detail-foot button.primary{background:var(--green);border-color:var(--green);color:var(--pc-on-accent)}
+button.primary{background:var(--green);border-color:var(--green);color:var(--pc-on-accent)}
 button.primary:hover{background:var(--pc-accent-hover);border-color:var(--pc-accent-hover)}
 button.quiet{color:var(--pc-secondary);background:transparent}
-button.danger{color:var(--red)}
 button[aria-pressed=true]:not(.marker){background:var(--soft);border-color:var(--green);color:var(--green)}
 input,select,textarea{background:var(--pc-field);color:var(--ink);border-color:var(--line)}
 input::placeholder,textarea::placeholder{color:var(--pc-faint)}
 .choice>span{background:var(--white);border-color:var(--line);color:var(--ink)}
 .choice input:checked+span{background:var(--soft);border-color:var(--green);color:var(--green)}
 .choice input:focus-visible+span{outline-color:var(--green)}
-.app-sidebar,#navigation-drawer,.mobile-appbar{background:var(--pc-sidebar);color:var(--pc-secondary);border-color:var(--line)}
-#sidebar-slot .app-sidebar,.sidebar-menu,#navigation-drawer .sidebar-foot{border-color:var(--line)}
-.app-sidebar button{background:transparent;color:var(--pc-secondary)}
-.app-sidebar button:hover{background:var(--pc-hover)}
-.app-sidebar .sidebar-new{background:var(--soft);color:var(--green)}
-.app-sidebar .sidebar-new:hover{background:var(--pc-hover);color:var(--green)}
-.brand-mark,.sidebar-brand .brand-mark{background:var(--green);color:var(--pc-on-accent)}
-.sidebar-count{background:var(--soft);color:var(--pc-secondary)}
-#navigation-drawer .sidebar-section-label,#navigation-drawer .sidebar-caption{color:var(--muted)}
-#sidebar-slot .app-sidebar button[data-hint]:hover:after,#sidebar-slot .app-sidebar button[data-hint]:focus-visible:after{background:var(--pc-tooltip);color:var(--pc-tooltip-text)}
-#trip-options-menu{color:var(--ink);background:var(--white);border-color:var(--line)}
-#trip-options-menu button{color:var(--ink)}
-#trip-options-menu button:hover{background:var(--pc-hover)}
-#trip-options-menu button.danger{color:var(--red)}
-#navigation-drawer .sidebar-trip-row.is-active,#navigation-drawer .sidebar-trip.is-active,#navigation-drawer .trip-item.is-active{background:var(--soft);border-color:var(--line);color:var(--ink)}
-#navigation-drawer .sidebar-trip:hover,#navigation-drawer .trip-more-button:hover,#navigation-drawer .trip-more-button[aria-expanded=true]{background:var(--pc-hover)}
-#navigation-drawer .trip-item-icon{background:var(--pc-hover);color:var(--pc-secondary)}
-#navigation-drawer .trip-item-copy small,#navigation-drawer .app-sidebar .trip-more-button{color:var(--muted)}
-.trip-current-dot{background:var(--green)}
-.mobile-wordmark{color:var(--ink)}
-.unified-chat{background:var(--white);border-color:var(--line)}
-.unified-chat .chat-head,.chat-dialog .chat-head{background:var(--white);border-color:var(--line)}
-.unified-chat .guide-mark,.chat-dialog .guide-mark{background:transparent;color:var(--pc-secondary);border-color:var(--line)}
-.chat-options-button{background:var(--pc-field);border-color:var(--line);color:var(--pc-secondary)}
-.chat-options-button:hover{background:var(--pc-hover);border-color:var(--pc-border-hover)}
-.unified-chat .chat-context,.chat-dialog .chat-context{background:var(--pc-field);border-color:var(--line);color:var(--muted)}
-.context-current{color:var(--pc-secondary)}
-.unified-chat .chat-messages,.chat-dialog .chat-messages{background:var(--white);scrollbar-color:var(--pc-border-hover) transparent}
-.chat-message p,.unified-chat .chat-message p{color:var(--ink)}
-.chat-message.user p,.unified-chat .chat-message.user p{background:var(--pc-user);color:var(--ink)}
-.chat-message>small,.chat-recommendation-label,.chat-recommendation-time,.carousel-hint,.carousel-count{color:var(--muted)}
-.chat-recommendation.is-current .chat-recommendation-label>span:last-child{color:var(--green)}
-.chat-message .chat-place-card,.chat-message .chat-place-card.selected{background:var(--white);border-color:var(--line)}
-.chat-message .chat-place-card.selected,.chat-message .chat-place-card.is-place-preview,.chat-message .chat-place-card.selected.is-place-preview{border-color:var(--green)}
-.carousel-card-heading strong,.chat-message .chat-place-eta{color:var(--ink)}
-.chat-message .chat-place-meta,.chat-message .chat-place-eta small{color:var(--muted)}
-.chat-message .chat-place-reason,.carousel-card-link{color:var(--pc-secondary)}
-.carousel-card-footer{border-color:var(--line)}
-.chat-message .carousel-arrow{background:var(--white);color:var(--pc-secondary);border-color:var(--line)}
-.unified-chat .chat-samples,.chat-dialog .chat-samples{background:var(--white)}
-.unified-chat .chat-samples button,.chat-dialog .chat-samples button{background:var(--pc-field);border-color:var(--line);color:var(--pc-secondary)}
-.chat-samples button:hover{background:var(--pc-hover)}
-.unified-chat .chat-compose,.chat-dialog .chat-compose{background:var(--white);border-top-color:var(--line)}
-.unified-chat .chat-compose textarea,.chat-dialog .chat-compose textarea{background:var(--pc-field);border-color:var(--line);color:var(--ink)}
-.chat-compose textarea::placeholder{color:var(--pc-faint)}
-.chat-compose form:focus-within textarea,.chat-compose textarea:focus-visible{background:var(--white);border-color:var(--green);box-shadow:0 0 0 3px var(--pc-focus)}
-.unified-chat .chat-compose button[type=submit],.chat-dialog .chat-compose button[type=submit]{background:var(--green);color:var(--pc-on-accent);border-color:var(--green)}
-.chat-compose .micro{color:var(--muted)}
-.onboarding-head,.onboarding-body .optional,.onboarding-foot{border-color:var(--line)}
-.onboarding-foot{background:var(--white)}
-.onboarding-foot button:disabled{background:var(--pc-disabled);border-color:var(--pc-disabled);color:var(--pc-disabled-text)}
-.explore-content .map-panel{border-color:var(--line)}
-.map-condition-chip,.explore-content .map-tools>summary,.explore-content .map-controls{background:var(--white);border-color:var(--line);color:var(--pc-secondary)}
-.map-condition-chip .condition-purpose{color:var(--ink)}
-.map-condition-chip i,.explore-content .map-controls button+button{border-color:var(--line)}
-.explore-content .map-controls button{color:var(--pc-secondary)}
-.explore-content .real-map-label,.real-map-label{background:var(--white);color:var(--muted)}
 .destination-marker{background:var(--pc-marker);color:var(--pc-marker-text)}
 .destination-marker.selected,.real-map .destination-marker.is-place-preview{background:var(--green);color:var(--pc-on-accent)}
-.real-map .destination-label,.real-map .observation-label{background:var(--white);color:var(--pc-secondary);border-color:var(--line)}
+.real-map .destination-label{background:var(--white);color:var(--pc-secondary);border-color:var(--line)}
 .real-map .destination-label.selected{color:var(--green);border-color:var(--green)}
 .real-map .leaflet-tooltip-top:before{border-top-color:var(--line)}
 .real-map .leaflet-tooltip-bottom:before{border-bottom-color:var(--line)}
-.map-tools-body{background:var(--white);border-color:var(--line);color:var(--ink)}
-.layer-controls button{border-color:var(--line);color:var(--pc-secondary);background:var(--white)}
-.layer-controls button.active{background:var(--soft);border-color:var(--green);color:var(--green)}
-.map-recommendations .compact-place,.map-recommendations .compact-place.selected{background:var(--white);border-color:var(--line)}
-.map-recommendations .compact-place.selected,.map-recommendations .compact-place.is-place-preview{border-color:var(--green)}
-.place-number{background:var(--pc-field);color:var(--muted)}
-.compact-place.selected .place-number{background:var(--soft);color:var(--green)}
-.map-recommendations .compact-place-copy strong{color:var(--ink)}
-.map-recommendations .compact-place-copy>span{color:var(--muted)}
-.map-recommendations .compact-place-time{color:var(--pc-secondary)}
-.map-recommendations .result-actions .next-search{background:var(--white);border-color:var(--line);color:var(--pc-secondary)}
-.map-recommendations .result-actions .next-search:hover{background:var(--pc-hover);border-color:var(--pc-border-hover)}
-.place-detail-number{background:var(--green);color:var(--pc-on-accent)}
-.place-detail,.explore-stage .detail-host .place-detail{background:var(--white);border-color:var(--line);color:var(--ink)}
-.place-summary-head,.place-summary-head .summary-demo{color:var(--muted)}
-.place-summary-title h2,.place-summary-eta,.place-detail-intro h2,.place-detail-eta>strong,.place-detail-section h3{color:var(--ink)}
-.place-summary-reason,.place-detail-reason>p{color:var(--pc-secondary)}
-.place-summary-parking{border-color:var(--line);color:var(--muted)}
-.place-summary-foot,.place-detail-foot,.detail-host .place-detail-head{background:var(--white);border-color:var(--line)}
-.place-summary-foot button,.detail-host .place-detail-foot button{border-color:var(--line)}
-.place-detail-eta,.place-detail-parking-record,.place-detail-parking-list .parking-record,.parking-record{background:var(--pc-field);border-color:var(--line)}
-.place-detail-eta-label{color:var(--pc-secondary)}
-.place-detail-reason,.place-detail-section,.place-detail-section+.place-detail-section{border-color:var(--line)}
 .dialog{background:var(--white);border-color:var(--line);color:var(--ink)}
 .dialog-head,.dialog-foot{background:var(--white);border-color:var(--line)}
-.history-card{background:var(--white);border-color:var(--line)}
-.history-card.is-current{background:var(--pc-field);border-color:var(--green);box-shadow:inset 3px 0 var(--green)}
-.history-card.is-current button:disabled,.history-current-badge{background:var(--soft);color:var(--green);border-color:var(--line)}
-.chat-welcome h2{color:var(--ink)}
-.chat-welcome>p,.welcome-eyebrow,.welcome-input-hint{color:var(--muted)}
-.chat-starter{border-color:var(--line);background:var(--pc-field)}
-.chat-starter:hover{border-color:var(--pc-border-hover)}
-.starter-icon{background:var(--soft);color:var(--green)}
-.chat-starter small,.chat-starter>svg{color:var(--muted)}
-.search-progress,.map-search-status,.map-load-status{background:var(--pc-field);border-color:var(--line);color:var(--pc-secondary)}
-.search-progress-heading strong,.search-progress-detail{color:var(--pc-secondary)}
-.search-progress-detail{border-color:var(--line)}
-.search-steps li{color:var(--muted)}
-.search-steps li:after{background:var(--line)}
-.search-step-dot{background:var(--pc-hover);color:var(--muted);border-color:var(--line)}
-.search-steps li.active{color:var(--green)}
-.search-steps li.active .search-step-dot{background:var(--green);color:var(--pc-on-accent);box-shadow:0 0 0 3px var(--soft)}
-.search-steps li.complete{color:var(--pc-secondary)}
-.search-steps li.complete .search-step-dot{background:var(--soft);color:var(--green)}
-.place-skeleton{background:var(--white);border-color:var(--line)}
-.place-skeleton span{background:linear-gradient(90deg,var(--pc-field),var(--pc-hover),var(--pc-field))}
-.context-transition-card{background:var(--pc-field);color:var(--pc-secondary);border-color:var(--line)}
-.context-transition-card strong{color:var(--ink)}
-.context-transition-card time,.context-transition-card ul{color:var(--muted)}
-.context-transition-current{background:var(--soft);color:var(--green)}
-.context-transition-next{color:var(--pc-secondary);border-color:var(--line)}
-#demo-controls .scenario-inner{background:var(--white);color:var(--ink);border-color:var(--line)}
-.demo-label{background:transparent;border-color:var(--line);color:var(--muted)}
+.map-load-status{background:var(--pc-field);border-color:var(--line);color:var(--pc-secondary)}
 .footer{color:var(--muted)}
 .toast{background:var(--pc-tooltip);color:var(--pc-tooltip-text)}
-.gallery-top{background:var(--white);color:var(--green)}
-.mobile-chat-launch{background:var(--green);color:var(--pc-on-accent);border-color:var(--green)}
 /* Photo and illustration colors, map tiles and semantic traffic layers stay intact. */
 
